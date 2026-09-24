@@ -33,15 +33,8 @@ try:
     def stem(word: str) -> str:
         return _NLTK.stem(word.lower())
 except Exception:
-    try:
-        import snowballstemmer as _sb
-        _SB = _sb.stemmer("english")
-
-        def stem(word: str) -> str:
-            return _SB.stemWord(word.lower())
-    except Exception:
-        def stem(word: str) -> str:  # type: ignore[misc]
-            return _bundled_stem(word)
+    def stem(word: str) -> str:  # type: ignore[misc]
+        return _bundled_stem(word)
 
 
 def id_completion_child(child: str, father: str) -> str:
