@@ -1,0 +1,3 @@
+# No third-party dependencies — stdlib only.
+# (nltk / snowballstemmer are used opportunistically in validator.py if
+# installed, with a bundled stemmer fallback.)
