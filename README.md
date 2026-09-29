@@ -1,4 +1,4 @@
-# E2ELoader — Python terminal port
+# Load Test Generator — Python terminal port
 
 `HAR -> dependency graph -> ready-to-run JMX` (UltimateThreadGroup). No GUI.
 Java parity: preprocessing filters, LCS>=0.44 + Porter stemming, 5 detectors,
@@ -24,4 +24,3 @@ python -m app.cli build-jmx -i login.har -g graphs/login.graph.json -o out/login
 python -m app.cli build-jmx -i login.har --auto-graph -o out/login.jmx --workload threads=20,delay=0,startup=30,hold=120,shutdown=10
 ```
 
-No servers, no install needed — stdlib only.
