@@ -11,17 +11,46 @@ from .har_model import load_har
 from .jmx_base import build_base_doc, write_xml
 from .jmx_correlate import correlate
 from .jmx_load import Workload, apply_workload
+from .llm_matcher import LLMConfig
 
 
 def _har_stem(har: str) -> str:
     return os.path.splitext(os.path.basename(har))[0]
 
 
+def _llm_config_from_args(a: argparse.Namespace) -> LLMConfig:
+    return LLMConfig(
+        provider=getattr(a, "llm_provider", "ollama"),
+        endpoint=getattr(a, "llm_endpoint", None) or os.getenv(
+            "LLM_ENDPOINT", os.getenv("OLLAMA_HOST", "http://localhost:11434")),
+        model=getattr(a, "llm_model", None) or os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
+        timeout=float(getattr(a, "llm_timeout", 30.0) or 30.0),
+        fallback_to_lcs=not getattr(a, "no_llm_fallback", False),
+    )
+
+
+def _add_llm_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--llm-match", action="store_true",
+                   help="use lightweight-LLM field-name matching instead of LCS+stemming")
+    p.add_argument("--llm-provider", default="ollama",
+                   choices=["ollama", "openai-compatible", "stub"],
+                   help="LLM backend (default: ollama)")
+    p.add_argument("--llm-endpoint", default=None,
+                   help="LLM server URL (default: $LLM_ENDPOINT or http://localhost:11434)")
+    p.add_argument("--llm-model", default=None,
+                   help="model name (default: $LLM_MODEL or qwen2.5:0.5b)")
+    p.add_argument("--llm-timeout", type=float, default=30.0)
+    p.add_argument("--no-llm-fallback", action="store_true",
+                   help="do not fall back to LCS when the LLM is unreachable/ambiguous")
+
+
 def cmd_build_graph(a: argparse.Namespace) -> int:
     out = a.out or os.path.join("graphs", _har_stem(a.har) + ".graph.json")
-    g, _, _ = build_graph(a.har)
+    g, _, _ = build_graph(a.har, use_llm=a.llm_match,
+                          llm_config=_llm_config_from_args(a) if a.llm_match else None)
     g.save(out)
-    print(f"graph: {len(g.nodes)} nodes, {len(g.edges)} edges -> {out}")
+    mode = "llm" if a.llm_match else "lcs"
+    print(f"graph: {len(g.nodes)} nodes, {len(g.edges)} edges [{mode}] -> {out}")
     return 0
 
 
@@ -70,7 +99,8 @@ def cmd_build_jmx(a: argparse.Namespace) -> int:
     graph_path = a.graph
     if not graph_path and a.auto_graph:
         graph_path = os.path.join("graphs", _har_stem(a.har) + ".graph.json")
-        g, _, _ = build_graph(a.har)
+        g, _, _ = build_graph(a.har, use_llm=a.llm_match,
+                              llm_config=_llm_config_from_args(a) if a.llm_match else None)
         g.save(graph_path)
         print(f"auto graph -> {graph_path}")
     if not graph_path:
@@ -93,6 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("build-graph", help="HAR -> dependency graph JSON")
     b.add_argument("-i", "--har", required=True)
     b.add_argument("-o", "--out", default=None)
+    _add_llm_args(b)
     b.set_defaults(fn=cmd_build_graph)
 
     s = sub.add_parser("show", help="print graph summary")
@@ -139,6 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
     j.add_argument("-o", "--out", required=True)
     j.add_argument("--workload", action="append", default=[],
                    help="threads=20,delay=0,startup=30,hold=120,shutdown=10 (repeatable)")
+    _add_llm_args(j)
     j.set_defaults(fn=cmd_build_jmx)
     return p
 

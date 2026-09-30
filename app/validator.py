@@ -1,14 +1,48 @@
 """Atomic dependency validation. Port of AtomicDependencyValidator.java.
 
-Uses OpenNLP PorterStemmer semantics; here via a bundled stemmer with
-nltk/snowball override when available. Threshold LCS >= 0.44 preserved.
+Two name-matching strategies:
+
+- LCS (default): exact value match, then Porter-stemmed longest-common-
+  substring >= 0.44 (Java parity).
+- LLM (opt-in via :func:`enable_llm`): exact value match, then a
+  lightweight LLM compares the raw field names with full endpoint context.
+  No stemming/preprocessing is applied on the LLM path.
 """
 from __future__ import annotations
 from urllib.parse import urlparse
 from .lcs import lc_substr_norm
+from . import llm_matcher as _LLM
 from .response_model import AtomicObject, StructuredObject
 
 LCS_DEADLINE = 0.44
+
+# ---- LLM opt-in state (process-global; set by extractor/CLI) ----
+_LLM_ENABLED = False
+_LLM_CONFIG: _LLM.LLMConfig | None = None
+
+
+def enable_llm(config: _LLM.LLMConfig | None = None) -> _LLM.LLMConfig:
+    """Enable the LLM name-matcher. Returns the active config."""
+    global _LLM_ENABLED, _LLM_CONFIG
+    _LLM_CONFIG = config or _LLM.LLMConfig.from_env()
+    _LLM_ENABLED = True
+    return _LLM_CONFIG
+
+
+def disable_llm() -> None:
+    global _LLM_ENABLED
+    _LLM_ENABLED = False
+
+
+def llm_enabled() -> bool:
+    return _LLM_ENABLED
+
+
+def active_llm_config() -> _LLM.LLMConfig:
+    global _LLM_CONFIG
+    if _LLM_CONFIG is None:
+        _LLM_CONFIG = _LLM.LLMConfig.from_env()
+    return _LLM_CONFIG
 
 
 def _bundled_stem(word: str) -> str:
@@ -68,30 +102,102 @@ def _name_match(to_name: str, atomic_name: str, father: StructuredObject | None,
 
 
 def general_atomic_comparison(atomic: AtomicObject, to_value: str, to_name: str | None,
-                              father: StructuredObject | None, from_url: str) -> bool:
+                              father: StructuredObject | None, from_url: str,
+                              consumer_url: str = "", location: str = "body",
+                              producer_method: str = "",
+                              consumer_method: str = "") -> bool:
     if atomic.value != to_value:
         return False
     if to_name is None:
         return False
+    if _LLM_ENABLED:
+        return _llm_name_match(atomic, father, to_name, from_url, consumer_url,
+                               to_value, location, producer_method,
+                               consumer_method,
+                               lcs_fallback=lambda: _name_match(
+                                   to_name, atomic.name, father, from_url))
     return _name_match(to_name, atomic.name, father, from_url)
 
 
+def _qualified_producer_name(atomic: AtomicObject,
+                             father: StructuredObject | None) -> str:
+    """Full producer field label for the LLM (no stemming)."""
+    if father is not None and father.name:
+        return f"{father.name}.{atomic.name}"
+    if atomic.xpath:
+        return f"{atomic.name} ({atomic.xpath})"
+    return atomic.name
+
+
+def _llm_name_match(atomic: AtomicObject, father: StructuredObject | None,
+                    to_name: str, from_url: str, consumer_url: str,
+                    value: str, location: str, producer_method: str = "",
+                    consumer_method: str = "",
+                    lcs_fallback=None) -> bool:
+    """Value already equal; ask the LLM about the names. Fall back to LCS."""
+    cfg = active_llm_config()
+    producer_endpoint = f"{producer_method} {from_url}".strip()
+    consumer_endpoint = f"{consumer_method} {consumer_url}".strip()
+    res = _LLM.field_match(
+        producer_endpoint=producer_endpoint,
+        producer_field=_qualified_producer_name(atomic, father),
+        producer_value=atomic.value,
+        consumer_endpoint=consumer_endpoint,
+        consumer_field=to_name,
+        consumer_value=value,
+        location=location,
+        cfg=cfg,
+    )
+    if res is not None:
+        return res
+    if cfg.fallback_to_lcs and lcs_fallback is not None:
+        return bool(lcs_fallback())
+    return False
+
+
 def evaluate_header_atomic_dep(atomic: AtomicObject, header_name: str, header_value: str,
-                               father: StructuredObject | None, from_url: str) -> bool:
+                               father: StructuredObject | None, from_url: str,
+                               consumer_url: str = "", producer_method: str = "",
+                               consumer_method: str = "") -> bool:
     if header_name == "Authorization":
+        # Bearer token passthrough: name is fixed, no LLM/LCS needed.
         return atomic.value == header_value[7:]
-    return general_atomic_comparison(atomic, header_value, header_name, father, from_url)
+    return general_atomic_comparison(atomic, header_value, header_name, father, from_url,
+                                     consumer_url=consumer_url, location="header",
+                                     producer_method=producer_method,
+                                     consumer_method=consumer_method)
 
 
 def evaluate_cookie_atomic_dep(atomic: AtomicObject, cookie_name: str, cookie_value: str,
-                               father: StructuredObject | None, from_url: str) -> bool:
+                               father: StructuredObject | None, from_url: str,
+                               consumer_url: str = "", producer_method: str = "",
+                               consumer_method: str = "") -> bool:
     if "Authorization" in cookie_name:
         return atomic.value == cookie_value
-    return general_atomic_comparison(atomic, cookie_value, cookie_name, father, from_url)
+    return general_atomic_comparison(atomic, cookie_value, cookie_name, father, from_url,
+                                     consumer_url=consumer_url, location="cookie",
+                                     producer_method=producer_method,
+                                     consumer_method=consumer_method)
 
 
 def evaluate_url_atomic_dep(atomic: AtomicObject, from_url: str, father: StructuredObject | None,
-                            possible_name: str) -> bool:
+                            possible_name: str, consumer_url: str = "",
+                            producer_method: str = "",
+                            consumer_method: str = "") -> bool:
+    if _LLM_ENABLED:
+        # URL path segment has no explicit field name; the preceding static
+        # segment (possible_name) is the consumer hint.
+        return _llm_name_match(atomic, father, possible_name, from_url,
+                               consumer_url, atomic.value, "url",
+                               producer_method, consumer_method,
+                               lcs_fallback=lambda: _lcs_url(atomic, from_url,
+                                                             father,
+                                                             possible_name))
+    return _lcs_url(atomic, from_url, father, possible_name)
+
+
+def _lcs_url(atomic: AtomicObject, from_url: str, father: StructuredObject | None,
+             possible_name: str) -> bool:
     to_lower = possible_name.lower()
     a = atomic.name.lower()
     if father is not None and father.name != "":

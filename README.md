@@ -24,3 +24,28 @@ python -m app.cli build-jmx -i login.har -g graphs/login.graph.json -o out/login
 python -m app.cli build-jmx -i login.har --auto-graph -o out/login.jmx --workload threads=20,delay=0,startup=30,hold=120,shutdown=10
 ```
 
+## Smart matching (opt-in LLM)
+
+Default stays LCS>=0.44 + Porter stemming. Add `--llm-match` to use a
+lightweight LLM for field-name comparison instead. Value equality is still
+checked first; only equal values reach the LLM, which receives:
+
+- producer endpoint, producer field (+ parent/xpath), producer value
+- consumer endpoint, consumer field, consumer value, location
+  (`header` / `queryparam` / `body` / `url` / `cookie`)
+
+No stemming is applied on the LLM path; full endpoint strings are sent.
+
+```
+python -m app.cli build-graph -i login.har --llm-match --llm-model qwen2.5:0.5b
+python -m app.cli build-jmx -i login.har --auto-graph --llm-match \
+  --llm-provider ollama --llm-endpoint http://localhost:11434 \
+  --llm-model qwen2.5:0.5b -o out/login.jmx
+```
+
+Providers: `ollama` (default, `POST /api/generate`), `openai-compatible`
+(`POST /v1/chat/completions`, token from `$OPENAI_API_KEY`/`$LLM_API_KEY`),
+`stub` (testing). Env overrides: `$LLM_PROVIDER`, `$LLM_ENDPOINT`
+(`$OLLAMA_HOST`), `$LLM_MODEL`, `$LLM_TIMEOUT`. If the LLM is unreachable
+or ambiguous it falls back to LCS unless `--no-llm-fallback` is given.
+

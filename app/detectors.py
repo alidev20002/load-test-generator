@@ -47,7 +47,10 @@ def check_url(responses: list, req_idx: int, graph: DependencyGraph,
             def fn(atomic: AtomicObject, father, _sub=sub, _poss=possible,
                    _frm=frm, _ri=ri):
                 if _sub == atomic.value and V.evaluate_url_atomic_dep(
-                        atomic, _frm.request.url, father, _poss):
+                        atomic, _frm.request.url, father, _poss,
+                        consumer_url=to.request.url,
+                        producer_method=_frm.request.method,
+                        consumer_method=to.request.method):
                     graph.edges.append(make_edge("url", _frm, to, atomic, _ri, req_idx,
                                                  subPath=_sub))
             _walk_atomic(responses[ri], fn)
@@ -64,7 +67,10 @@ def check_header(responses: list, req_idx: int, graph: DependencyGraph,
                 continue
             def fn(atomic: AtomicObject, father, _h=h, _frm=frm, _ri=ri):
                 if V.evaluate_header_atomic_dep(atomic, _h.name, _h.value, father,
-                                                _frm.request.url):
+                                                _frm.request.url,
+                                                consumer_url=to.request.url,
+                                                producer_method=_frm.request.method,
+                                                consumer_method=to.request.method):
                     graph.edges.append(make_edge("header", _frm, to, atomic, _ri, req_idx,
                                                  header_name=_h.name))
             _walk_atomic(responses[ri], fn)
@@ -79,7 +85,11 @@ def check_query(responses: list, req_idx: int, graph: DependencyGraph,
                 continue
             def fn(atomic: AtomicObject, father, _q=q, _frm=frm, _ri=ri):
                 if V.general_atomic_comparison(atomic, _q.value, _q.name, father,
-                                               _frm.request.url):
+                                               _frm.request.url,
+                                               consumer_url=to.request.url,
+                                               location="queryparam",
+                                               producer_method=_frm.request.method,
+                                               consumer_method=to.request.method):
                     graph.edges.append(make_edge("queryparam", _frm, to, atomic, _ri,
                                                  req_idx, query_param_name=_q.name))
             _walk_atomic(responses[ri], fn)
@@ -94,7 +104,10 @@ def check_cookie(responses: list, req_idx: int, graph: DependencyGraph,
                 continue
             def fn(atomic: AtomicObject, father, _c=c, _frm=frm, _ri=ri):
                 if V.evaluate_cookie_atomic_dep(atomic, _c.name, _c.value, father,
-                                                _frm.request.url):
+                                                _frm.request.url,
+                                                consumer_url=to.request.url,
+                                                producer_method=_frm.request.method,
+                                                consumer_method=to.request.method):
                     graph.edges.append(make_edge("cookie", _frm, to, atomic, _ri, req_idx,
                                                  name=_c.name))
             _walk_atomic(responses[ri], fn)
@@ -127,7 +140,11 @@ def check_body(responses: list, req_idx: int, graph: DependencyGraph,
                     continue
                 def fn(atomic: AtomicObject, father, _p=p, _frm=frm, _ri=ri):
                     if V.general_atomic_comparison(atomic, _p.value, _p.name, father,
-                                                   _frm.request.url):
+                                                   _frm.request.url,
+                                                   consumer_url=to.request.url,
+                                                   location="body",
+                                                   producer_method=_frm.request.method,
+                                                   consumer_method=to.request.method):
                         graph.edges.append(make_edge("bodyue", _frm, to, atomic, _ri,
                                                      req_idx, name=_p.name))
                 _walk_atomic(responses[ri], fn)
@@ -194,7 +211,11 @@ def _check_primitive(responses, value: str, name: str, req_idx: int,
         if frm is None:
             continue
         def fn(atomic: AtomicObject, father, _v=value, _n=name, _frm=frm, _ri=ri):
-            if V.general_atomic_comparison(atomic, _v, _n, father, _frm.request.url):
+            if V.general_atomic_comparison(atomic, _v, _n, father, _frm.request.url,
+                                           consumer_url=to.request.url,
+                                           location="body",
+                                           producer_method=_frm.request.method,
+                                           consumer_method=to.request.method):
                 graph.edges.append(make_edge("bodyjson", _frm, to, atomic, _ri, req_idx,
                                              name=_n, primitive=True))
         _walk_atomic(responses[ri], fn)
