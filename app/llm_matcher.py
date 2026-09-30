@@ -99,31 +99,30 @@ def clear_cache() -> None:
     _CACHE.clear()
 
 
-def _truncate(v: str | None, limit: int = 200) -> str:
-    v = "" if v is None else str(v)
-    return v if len(v) <= limit else v[:limit] + "..."
-
-
 def build_prompt(producer_endpoint: str, producer_field: str,
                  producer_value: str, consumer_endpoint: str,
                  consumer_field: str, consumer_value: str,
                  location: str) -> str:
     loc = normalize_location(location)
-    return (
-        "You decide whether two API fields represent the same value "
-        "(dependency detection for load-test correlation).\n"
-        f"Producer endpoint: {producer_endpoint}\n"
-        f"Producer field: {producer_field}\n"
-        f"Producer value: {_truncate(producer_value)}\n"
-        f"Consumer endpoint: {consumer_endpoint}\n"
-        f"Consumer field ({loc}): {consumer_field}\n"
-        f"Consumer value: {_truncate(consumer_value)}\n"
-        "The values are already equal. Consider ONLY whether the field names "
-        "and endpoint context plausibly denote the same concept "
-        "(e.g. 'id' vs 'userId' vs 'user_id' is YES; 'name' vs 'email' is NO; "
-        "generic values like 'true'/'0' need strongly similar names).\n"
-        "Answer with exactly one word: YES or NO."
-    )
+    return f"""You are verifying whether two fields observed in HTTP traffic represent a producer-consumer data dependency (a value produced by one API response is consumed by a later API request).
+
+### API 1 (Producer / Response):
+Endpoint: {producer_endpoint}
+Field: <CANDIDATE>{producer_field}</CANDIDATE>
+Value: {producer_value}
+
+### API 2 (Consumer / Request):
+Endpoint: {consumer_endpoint}
+Location: {location}
+Field: <CANDIDATE>{consumer_field}</CANDIDATE>
+Value: {consumer_value}
+
+### Question:
+Does API 2 genuinely depend on the value produced by API 1 in this field? Field names may differ lexically but refer to the same concept (e.g. an authentication token embedded with a scheme prefix like 'Bearer '). Coincidentally equal common values (booleans, small numbers) or unrelated entities that merely share a value do NOT constitute a real dependency.
+
+Respond ONLY with a JSON object in this exact format, nothing else:
+{{"dependency": true or false, "confidence": 0.0-1.0, "reasoning": "brief reason"}}
+"""
 
 
 def parse_yes_no(text: str | None) -> bool | None:
