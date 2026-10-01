@@ -23,7 +23,6 @@ so the caller (validator) can fall back to LCS or treat it as no-match.
 from __future__ import annotations
 
 import json
-import os
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable
@@ -80,16 +79,32 @@ class LLMConfig:
 
     @staticmethod
     def from_env(**overrides) -> "LLMConfig":
-        provider = overrides.get("provider") or os.getenv("LLM_PROVIDER", "ollama")
-        endpoint = overrides.get("endpoint") or os.getenv(
-            "LLM_ENDPOINT", os.getenv("OLLAMA_HOST", "http://localhost:11434"))
-        model = overrides.get("model") or os.getenv("LLM_MODEL", "qwen2.5:0.5b")
-        timeout = float(overrides.get("timeout") or os.getenv("LLM_TIMEOUT", "30"))
-        fallback = overrides.get("fallback_to_lcs", True)
+        """Build config from configs.json (legacy name kept for compatibility).
+
+        Optional ``overrides`` (provider/endpoint/model/timeout/
+        fallback_to_lcs/...) win over the file. Env vars are resolved
+        through :mod:`app.config` so ``configs.json`` stays the single
+        source of truth.
+        """
+        from . import config as _cfg
+
+        s = _cfg.get_llm_settings()
+        provider = overrides.get("provider") or s.get("provider", "ollama")
+        endpoint = overrides.get("endpoint") or s.get("endpoint") or _cfg.get_env(
+            "LLM_ENDPOINT", _cfg.get_env("OLLAMA_HOST", "http://localhost:11434"))
+        model = overrides.get("model") or s.get("model", "qwen2.5:0.5b")
+        timeout = float(overrides.get("timeout", s.get("timeout", 30)) or 30)
+        fallback = overrides.get("fallback_to_lcs", s.get("fallback_to_lcs", True))
+        cache = overrides.get("cache_enabled", s.get("cache_enabled", True))
         return LLMConfig(provider=provider, endpoint=endpoint.rstrip("/"),
                          model=model, timeout=timeout,
                          fallback_to_lcs=bool(fallback),
+                         cache_enabled=bool(cache),
                          predict_fn=overrides.get("predict_fn"))
+
+    @staticmethod
+    def from_config(**overrides) -> "LLMConfig":
+        return LLMConfig.from_env(**overrides)
 
 
 _CACHE: dict[tuple, bool] = {}
@@ -126,7 +141,7 @@ Respond ONLY with a JSON object in this exact format, nothing else:
 
 
 def parse_yes_no(text: str | None) -> bool | None:
-    """Parse an LLM answer to True/False, None when ambiguous."""
+    """Parse a plain YES/NO answer to True/False, None when ambiguous."""
     if not text:
         return None
     t = text.strip().upper()
@@ -142,6 +157,41 @@ def parse_yes_no(text: str | None) -> bool | None:
     if tokens and all(x == tokens[0] for x in tokens):
         return tokens[0] == "YES"
     return None
+
+
+def parse_dependency_answer(text: str | None) -> bool | None:
+    """Parse an LLM answer to True/False, None when ambiguous.
+
+    Understands the JSON format requested by :func:`build_prompt`
+    (``{"dependency": true/false, ...}``, optionally wrapped in code
+    fences) and falls back to :func:`parse_yes_no` for plain YES/NO
+    answers (stub / predict_fn / terse models).
+    """
+    if not text:
+        return None
+    import re
+    t = text.strip()
+    # strip ```json ... ``` fences if present
+    m = re.search(r"```(?:json)?\s*(.*?)```", t, re.DOTALL | re.IGNORECASE)
+    if m:
+        t = m.group(1).strip()
+    # try JSON object with a "dependency" bool
+    if "dependency" in t.lower():
+        try:
+            start, end = t.index("{"), t.rindex("}") + 1
+            obj = json.loads(t[start:end])
+            dep = obj.get("dependency")
+            if isinstance(dep, bool):
+                return dep
+            if isinstance(dep, str):
+                v = dep.strip().lower()
+                if v in ("true", "yes", "1"):
+                    return True
+                if v in ("false", "no", "0"):
+                    return False
+        except Exception:
+            pass
+    return parse_yes_no(text)
 
 
 def _post_json(url: str, payload: dict, timeout: float,
@@ -162,14 +212,16 @@ def _query_ollama(prompt: str, cfg: LLMConfig) -> str | None:
 
 
 def _query_openai_compatible(prompt: str, cfg: LLMConfig) -> str | None:
+    from . import config as _cfg
+
     headers: dict = {}
-    token = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+    token = _cfg.get_env("OPENAI_API_KEY") or _cfg.get_env("LLM_API_KEY")
     if token:
         headers["Authorization"] = f"Bearer {token}"
     body = _post_json(f"{cfg.endpoint}/v1/chat/completions",
                       {"model": cfg.model,
                        "messages": [{"role": "user", "content": prompt}],
-                       "temperature": 0, "max_tokens": 5}, cfg.timeout, headers)
+                       "temperature": 0, "max_tokens": 200}, cfg.timeout, headers)
     try:
         return body["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
@@ -189,7 +241,7 @@ def _query(prompt: str, payload: dict, cfg: LLMConfig) -> bool | None:
             raw = _query_ollama(prompt, cfg)
     except Exception:
         return None
-    return parse_yes_no(raw)
+    return parse_dependency_answer(raw)
 
 
 def field_match(producer_endpoint: str, producer_field: str,

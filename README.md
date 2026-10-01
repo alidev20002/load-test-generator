@@ -1,6 +1,6 @@
-# Load Test Generator — Python terminal port
+# Load Test Generator — FastAPI service
 
-`HAR -> dependency graph -> ready-to-run JMX` (UltimateThreadGroup). No GUI.
+`HAR -> dependency graph -> ready-to-run JMX` (UltimateThreadGroup). No GUI, no CLI.
 Java parity: preprocessing filters, LCS>=0.44 + Porter stemming, 5 detectors,
 local `schema_generator` for body-schema match, 2-phase JMX (base + correlate + load).
 
@@ -11,22 +11,55 @@ WSS out of scope. CSV supported.
 pip install -r requirements.txt
 ```
 
-## Use
+## Run
 ```
-python -m app.cli build-graph -i login.har -o graphs/login.graph.json
-python -m app.cli show -g graphs/login.graph.json
-python -m app.cli list-edges -g graphs/login.graph.json --to 2
-python -m app.cli add-edge -g graphs/login.graph.json --to 2 --type header --key Authorization --from 0 --resp-name token --resp-value abc --resp-xpath $.token
-python -m app.cli del-edge -g graphs/login.graph.json --id 3
-python -m app.cli edit-edge -g graphs/login.graph.json --id 3 --value myLiteral
-python -m app.cli build-jmx -i login.har -g graphs/login.graph.json -o out/login.jmx --workload threads=20,delay=0,startup=30,hold=120,shutdown=10
-# or one-shot:
-python -m app.cli build-jmx -i login.har --auto-graph -o out/login.jmx --workload threads=20,delay=0,startup=30,hold=120,shutdown=10
+uvicorn app.main:app --reload
 ```
+Docs: `http://localhost:8000/docs`
+
+## Config
+
+All LLM and env settings live in `app/configs.json` and are loaded by
+`app/config.py` (importing it exports the `env` block to `os.environ`).
+No CLI flags or per-process env wiring is needed. `use_llm: true` on the
+build endpoints selects the LLM matcher with the file's settings.
+
+```json
+{
+  "env": { "OPENAI_API_KEY": "", "LLM_API_KEY": "", "OLLAMA_HOST": "http://localhost:11434" },
+  "llm": { "provider": "ollama", "endpoint": "http://localhost:11434",
+           "model": "qwen2.5:0.5b", "timeout": 30.0,
+           "fallback_to_lcs": true, "cache_enabled": true }
+}
+```
+
+Inspect/update at runtime: `GET /config`, `PUT /config`.
+
+## Use (API)
+
+The service is stateless: the client holds the graph JSON between calls.
+
+```
+POST /graphs/build        multipart: har=<login.har>, use_llm=false
+                          -> {nodes, edges, mode, graph}
+POST /graphs/describe     {graph} -> {description, nodes, edges}
+POST /graphs/edges/list   {graph, to_idx?, type?} -> {edges:[{id, type, ...}]}
+POST /graphs/edges/add    {graph, to, type, key, from?, resp_name?, resp_value?,
+                           resp_xpath?, literal?, csv?, from_har_idx?, to_har_idx?}
+                          -> {nodes, edges, graph, edge}
+POST /graphs/edges/delete {graph, id} -> {nodes, edges, graph, deleted}
+POST /graphs/edges/edit   {graph, id, key?, value?} -> {nodes, edges, graph, edge}
+POST /jmx/build           multipart: har=<login.har>, graph=<graph.json>,
+                          auto_graph=false, use_llm=false,
+                          workload=["threads=20,delay=0,startup=30,hold=120,shutdown=10"]
+                          -> login.jmx download (application/xml)
+```
+
+One-shot without a stored graph: send `auto_graph=true` and omit `graph`.
 
 ## Smart matching (opt-in LLM)
 
-Default stays LCS>=0.44 + Porter stemming. Add `--llm-match` to use a
+Default stays LCS>=0.44 + Porter stemming. Send `use_llm=true` to use a
 lightweight LLM for field-name comparison instead. Value equality is still
 checked first; only equal values reach the LLM, which receives:
 
@@ -36,16 +69,8 @@ checked first; only equal values reach the LLM, which receives:
 
 No stemming is applied on the LLM path; full endpoint strings are sent.
 
-```
-python -m app.cli build-graph -i login.har --llm-match --llm-model qwen2.5:0.5b
-python -m app.cli build-jmx -i login.har --auto-graph --llm-match \
-  --llm-provider ollama --llm-endpoint http://localhost:11434 \
-  --llm-model qwen2.5:0.5b -o out/login.jmx
-```
-
 Providers: `ollama` (default, `POST /api/generate`), `openai-compatible`
-(`POST /v1/chat/completions`, token from `$OPENAI_API_KEY`/`$LLM_API_KEY`),
-`stub` (testing). Env overrides: `$LLM_PROVIDER`, `$LLM_ENDPOINT`
-(`$OLLAMA_HOST`), `$LLM_MODEL`, `$LLM_TIMEOUT`. If the LLM is unreachable
-or ambiguous it falls back to LCS unless `--no-llm-fallback` is given.
-
+(`POST /v1/chat/completions`, token from `configs.json` `env.OPENAI_API_KEY` /
+`env.LLM_API_KEY`), `stub` (testing). If the LLM is unreachable
+or ambiguous it falls back to LCS unless `fallback_to_lcs: false` is set in
+`configs.json`.

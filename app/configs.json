@@ -1,0 +1,15 @@
+{
+  "env": {
+    "OPENAI_API_KEY": "",
+    "LLM_API_KEY": "",
+    "OLLAMA_HOST": "http://185.239.2.48:11434"
+  },
+  "llm": {
+    "provider": "ollama",
+    "endpoint": "http://185.239.2.48:11434",
+    "model": "qwen2.5-coder:7b",
+    "timeout": 30.0,
+    "fallback_to_lcs": true,
+    "cache_enabled": true
+  }
+}
