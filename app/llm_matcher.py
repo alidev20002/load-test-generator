@@ -113,7 +113,7 @@ Value: {producer_value}
 
 ### API 2 (Consumer / Request):
 Endpoint: {consumer_endpoint}
-Location: {location}
+Location: {loc}
 Field: <CANDIDATE>{consumer_field}</CANDIDATE>
 Value: {consumer_value}
 
