@@ -142,7 +142,7 @@ $("#clearHarBtn").onclick = (e) => {
 };
 $("#useLlm").onchange = (e) => {
   state.useLlm = e.target.checked;
-  $("#modePill").textContent = "mode: " + (state.useLlm ? "llm" : "lcs");
+  $("#modePill").textContent = "Mode: " + (state.useLlm ? "LLM" : "LCS");
 };
 
 /* ---------- build graph ---------- */
@@ -160,7 +160,7 @@ $("#buildGraphBtn").onclick = async () => {
     const r = await fetch("/graphs/build", { method: "POST", body: fd });
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();
-    state.graph = j.graph; state.mode = j.mode || (state.useLlm ? "llm" : "lcs");
+    state.graph = j.graph; state.mode = j.mode || (state.useLlm ? "LLM" : "LCS");
     state.pos = {}; state.selected = null; state._fitOnce = false;
     setStatus($("#buildStatus"), `✓ ${j.nodes} nodes · ${j.edges} edges (mode=${state.mode}) — open Step 2`, true);
     afterGraphLoaded();
@@ -338,7 +338,7 @@ function el(tag, attrs = {}, parent) {
   return e;
 }
 function afterGraphLoaded() {
-  $("#graphMode").textContent = "mode: " + state.mode;
+  $("#graphMode").textContent = "Mode: " + state.mode;
   $("#graphStats").textContent = `${state.graph.nodes.length} endpoints · ${state.graph.edges.length} dependencies`;
   $("#emptyGraph").style.display = state.graph.nodes.length ? "none" : "grid";
   renderLegend(); render();
