@@ -72,6 +72,7 @@ main{display:flex;flex-direction:column;gap:14px}
 .btn.primary{background:var(--acc);border:1px solid var(--acc);color:#fff}
 .btn.primary:hover{filter:brightness(.92);background:var(--acc)}
 .btn.ghost small,.btn small{opacity:.65;font-weight:400}
+.btn.active{border-color:var(--acc);color:var(--acc);background:var(--pill-bg)}
 .btn.sm{padding:7px 11px;font-size:13px}
 .btn.big{padding:13px 30px;font-size:15px;border-radius:12px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
@@ -110,11 +111,15 @@ main{display:flex;flex-direction:column;gap:14px}
 .tooltip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--stroke);border-radius:10px;padding:10px 12px;font-size:12.5px;max-width:330px;z-index:5;box-shadow:var(--shadow);line-height:1.55;color:var(--txt)}
 .tooltip.hidden{display:none}
 .tooltip b{color:var(--txt)}.tooltip .tt{color:var(--acc);font-weight:700}
-.node-card{cursor:pointer}
+.node-card{cursor:pointer;filter:drop-shadow(0 3px 6px rgba(25,40,70,.16))}
+[data-theme="dark"] .node-card{filter:drop-shadow(0 3px 8px rgba(0,0,0,.5))}
+.node-card:hover rect.body{stroke:var(--acc)}
 .node-card rect.body{fill:var(--node-fill);stroke:var(--node-stroke);stroke-width:1.2}
 .node-card.selected rect.body{stroke:var(--acc);stroke-width:2.5}
 .node-card.csv rect.body{stroke-dasharray:6 4;stroke:var(--warn)}
 .edge{fill:none;cursor:pointer}
+.edge-g:hover .edge{stroke-width:3.4}
+.edge.selected{filter:drop-shadow(0 0 5px var(--acc))}
 .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
 .side{background:var(--inset);border:1px solid var(--stroke);border-radius:12px;padding:12px;max-height:640px;overflow:auto}
 .tabs{display:flex;gap:6px;margin-bottom:10px}

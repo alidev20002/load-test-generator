@@ -3,7 +3,7 @@ const $ = (s) => document.querySelector(s);
 const state = {
   harFile: null, graph: null, mode: "lcs",
   useLlm: false, selected: null, // {kind:'node'|'edge', id}
-  hiddenTypes: new Set(), nodeFilter: "",
+  hiddenTypes: new Set(), nodeFilter: "", showLabels: true,
   jmxBlob: null, jmxText: "",
   view: { x: 20, y: 20, k: 1 },
   pos: {}, // nodeIdx -> {x,y}
@@ -161,7 +161,7 @@ $("#buildGraphBtn").onclick = async () => {
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();
     state.graph = j.graph; state.mode = j.mode || (state.useLlm ? "llm" : "lcs");
-    state.pos = {}; state.selected = null;
+    state.pos = {}; state.selected = null; state._fitOnce = false;
     setStatus($("#buildStatus"), `✓ ${j.nodes} nodes · ${j.edges} edges (mode=${state.mode}) — open Step 2`, true);
     afterGraphLoaded();
     gotoStep(2);
@@ -199,7 +199,26 @@ function nodeIdxOf(obj) {
   return state.graph.nodes.findIndex((n) => sameNode(n, obj));
 }
 function edgeEndpoints(e) {
-  return { from: e.from ? nodeIdxOf(e.from) : -1, to: nodeIdxOf(e.to) };
+  const g = state.graph;
+  let from = -1, to = -1;
+  if (e.from) {
+    if (e.from.kind === "csv" || e.from.filename) {
+      from = g.nodes.findIndex(
+        (x) => (x.kind === "csv" || x.filename) && x.filename === e.from.filename &&
+          (x.variablesName || "") === (e.from.variablesName || ""));
+    }
+    if (from < 0) from = nodeIdxOf(e.from);
+  }
+  if (e.to) {
+    to = nodeIdxOf(e.to);
+    if (to < 0) {
+      // lenient fallback: same endpoint even if HAR indices differ
+      to = g.nodes.findIndex(
+        (x) => !x.filename && x.request && e.to.request &&
+          x.request.method === e.to.request.method && x.request.url === e.to.request.url);
+    }
+  }
+  return { from, to };
 }
 function edgeKey(e) {
   return e.name || e.header_name || e.query_param_name || e.subPath || "—";
@@ -210,33 +229,103 @@ function edgeVar(e) {
   return "—";
 }
 
-/* ---------- layout ---------- */
-function computeLayout() {
-  const n = state.graph.nodes.length;
-  const layers = new Array(n).fill(0);
-  // topo-ish: iterate edges in order, push layer forward
-  for (let pass = 0; pass < 4; pass++) {
-    (state.graph.edges || []).forEach((e) => {
-      const { from, to } = edgeEndpoints(e);
-      if (from >= 0 && to >= 0 && layers[to] <= layers[from]) layers[to] = layers[from] + 1;
-    });
+/* ---------- layout: layered DAG (longest-path + barycenter crossing reduction) ---------- */
+const NW = 260, NH = 100, DX = 380, DY = 210;
+
+function cubicAt(x0, y0, x1, y1, x2, y2, x3, y3, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
+    y: u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3,
+  };
+}
+
+/* smooth curve between two ports; back-edges bow downward so direction stays readable */
+function edgeCurve(x1, y1, x2, y2) {
+  let cx1, cy1, cx2, cy2;
+  if (x2 - x1 > 40) {
+    const c = Math.max(70, (x2 - x1) * 0.5);
+    cx1 = x1 + c; cy1 = y1; cx2 = x2 - c; cy2 = y2;
+  } else {
+    const bow = 120 + Math.abs(y2 - y1) * 0.25;
+    cx1 = x1 + 90; cy1 = y1 + bow; cx2 = x2 - 90; cy2 = y2 + bow;
   }
-  const maxL = Math.max(0, ...layers);
+  return {
+    d: `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`,
+    mid: cubicAt(x1, y1, cx1, cy1, cx2, cy2, x2, y2, 0.5),
+    p0: { x: x1, y: y1 },
+  };
+}
+
+function computeLayout() {
+  const nodes = state.graph.nodes, edges = state.graph.edges || [];
+  const n = nodes.length;
+  const succ = nodes.map(() => []), pred = nodes.map(() => []);
+  const hasAny = new Array(n).fill(false);
+  edges.forEach((e) => {
+    const a = edgeEndpoints(e);
+    if (a.to < 0 || a.to >= n) return;
+    hasAny[a.to] = true;
+    if (a.from >= 0 && a.from < n) {
+      hasAny[a.from] = true;
+      if (a.from !== a.to) { succ[a.from].push(a.to); pred[a.to].push(a.from); }
+    }
+  });
+  const minIdx = (i) => (nodes[i].indexs && nodes[i].indexs.length ? nodes[i].indexs[0] : 1e9);
+  // longest-path layering
+  const indeg = pred.map((p) => p.length);
+  const layer = new Array(n).fill(-1);
+  const queue = [];
+  for (let i = 0; i < n; i++) if (indeg[i] === 0) { queue.push(i); layer[i] = 0; }
+  while (queue.length) {
+    queue.sort((a, b) => minIdx(a) - minIdx(b));
+    const u = queue.shift();
+    for (const v of succ[u]) {
+      if (layer[v] < layer[u] + 1) layer[v] = layer[u] + 1;
+      if (--indeg[v] === 0) queue.push(v);
+    }
+  }
+  let maxL = Math.max(0, ...layer);
+  const leftover = [];
+  for (let i = 0; i < n; i++) if (layer[i] < 0) leftover.push(i);
+  leftover.sort((a, b) => minIdx(a) - minIdx(b));
+  leftover.forEach((v, k) => { layer[v] = maxL + 1 + k; });
+  // order within layers: recording order, then barycenter sweeps to reduce crossings
   const perLayer = {};
-  layers.forEach((l, i) => { (perLayer[l] = perLayer[l] || []).push(i); });
-  const W = 300, H = 150;
+  for (let i = 0; i < n; i++) {
+    if (!hasAny[i]) continue;
+    (perLayer[layer[i]] = perLayer[layer[i]] || []).push(i);
+  }
+  const orderPos = {};
+  const setOrder = () => Object.entries(perLayer).forEach(([l, arr]) => arr.forEach((v, k) => (orderPos[v] = k)));
+  const bary = (v, nbs) => {
+    const xs = nbs.filter((u) => orderPos[u] !== undefined).map((u) => orderPos[u]);
+    if (!xs.length) return orderPos[v] ?? 0;
+    return xs.reduce((s, x) => s + x, 0) / xs.length;
+  };
+  Object.values(perLayer).forEach((arr) => arr.sort((a, b) => minIdx(a) - minIdx(b)));
+  const Ls = Object.keys(perLayer).map(Number).sort((a, b) => a - b);
+  for (let it = 0; it < 2; it++) {
+    setOrder();
+    for (const l of Ls.slice(1)) perLayer[l].sort((a, b) => (bary(a, pred[a]) - bary(b, pred[b])) || (minIdx(a) - minIdx(b)));
+    setOrder();
+    for (const l of Ls.slice().reverse().slice(1)) perLayer[l].sort((a, b) => (bary(a, succ[a]) - bary(b, succ[b])) || (minIdx(a) - minIdx(b)));
+  }
+  const maxCount = Math.max(1, ...Object.values(perLayer).map((a) => a.length));
   Object.entries(perLayer).forEach(([l, arr]) => {
-    arr.forEach((ni, k) => {
-      if (!state.pos[ni]) state.pos[ni] = { x: 60 + Number(l) * W, y: 60 + k * H };
+    const offY = ((maxCount - arr.length) * DY) / 2;
+    arr.forEach((v, k) => {
+      if (!state.pos[v]) state.pos[v] = { x: 60 + Number(l) * DX, y: 60 + offY + k * DY };
     });
   });
-  if (maxL === 0 && n > 0) {
-    // no deps: wrap grid
-    state.graph.nodes.forEach((_, i) => {
-      if (!state.pos[i]) state.pos[i] = { x: 60 + (i % 3) * W, y: 60 + Math.floor(i / 3) * H };
-    });
-  }
-  return { maxL };
+  // isolated nodes: tidy grid below the main flow
+  const iso = [];
+  for (let i = 0; i < n; i++) if (!hasAny[i]) iso.push(i);
+  iso.sort((a, b) => minIdx(a) - minIdx(b));
+  const mainBottom = 60 + maxCount * DY;
+  iso.forEach((v, k) => {
+    if (!state.pos[v]) state.pos[v] = { x: 60 + (k % 3) * DX, y: mainBottom + 60 + Math.floor(k / 3) * DY };
+  });
 }
 
 /* ---------- render SVG ---------- */
@@ -253,6 +342,7 @@ function afterGraphLoaded() {
   $("#graphStats").textContent = `${state.graph.nodes.length} endpoints · ${state.graph.edges.length} dependencies`;
   $("#emptyGraph").style.display = state.graph.nodes.length ? "none" : "grid";
   renderLegend(); render();
+  if (!state._fitOnce) { fitView(); state._fitOnce = true; }
   refreshEdgesTable(); updateConfirmSummary();
 }
 function renderLegend() {
@@ -285,40 +375,77 @@ function render() {
   });
 
   const typeFilter = $("#edgeTypeFilter").value;
-  const NW = 250, NH = 86;
 
-  // edges under nodes
+  // manual origins (literal values) share one ghost chip with fan-out edges
+  const ghost = { list: [], byKey: {} };
+  (state.graph.edges || []).forEach((e, id) => {
+    if (typeFilter && e.type !== typeFilter) return;
+    if (state.hiddenTypes.has(e.type)) return;
+    const a = edgeEndpoints(e);
+    if (a.to < 0 || !state.pos[a.to] || !visibleNode(a.to)) return;
+    if (a.from < 0) {
+      const key = "manual";
+      if (!ghost.byKey[key]) { ghost.byKey[key] = { key, label: "manual values", edges: [] }; ghost.list.push(ghost.byKey[key]); }
+      ghost.byKey[key].edges.push({ e, id, to: a.to });
+    }
+  });
+  const minPX = Math.min(...Object.values(state.pos).map((p) => p.x));
+  const GX = minPX - 250, GW = 170, GH = 38;
+  ghost.list.forEach((gh, gi) => {
+    gh.x = GX; gh.y = 60 + gi * 64;
+    const gg = el("g", { transform: `translate(${GX},${gh.y})` }, vp);
+    el("rect", { width: GW, height: GH, rx: 19, fill: "none", stroke: "#8b98b3", "stroke-width": 1.4, "stroke-dasharray": "6 4" }, gg);
+    const gt = el("text", { x: GW / 2, y: GH / 2 + 4.5, "text-anchor": "middle", "font-size": 12, "font-weight": 700, fill: "#8b98b3" }, gg);
+    gt.textContent = "✎ " + gh.label;
+  });
+
+  // edges under the node cards
   (state.graph.edges || []).forEach((e, id) => {
     if (typeFilter && e.type !== typeFilter) return;
     if (state.hiddenTypes.has(e.type)) return;
     const { from, to } = edgeEndpoints(e);
-    if (to < 0 || !state.pos[to]) return;
-    const p2 = { x: state.pos[to].x, y: state.pos[to].y + NH / 2 };
-    let p1;
-    if (from < 0) { p1 = { x: p2.x - 170, y: p2.y - 90 }; } // manual / CSV / literal stub
-    else {
-      if (!state.pos[from] || !visibleNode(from)) return;
-      p1 = { x: state.pos[from].x + NW, y: state.pos[from].y + NH / 2 };
+    if (to < 0 || !state.pos[to] || !visibleNode(to)) return;
+    const color = EDGE_COLORS[e.type] || "#888";
+    const sel = state.selected?.kind === "edge" && state.selected.id === id;
+    let d, p0, lx, ly, dashed = false;
+    if (from >= 0 && from === to) {
+      // self-loop arcs above the node so the arrow stays visible
+      const nx = state.pos[to].x, ny = state.pos[to].y;
+      const sx = nx + NW - 50, ex = nx + 50;
+      d = `M${sx},${ny} C${sx + 50},${ny - 85} ${ex - 50},${ny - 85} ${ex},${ny}`;
+      p0 = { x: sx, y: ny };
+      lx = nx + NW / 2; ly = ny - 72;
+    } else {
+      // stop before the target border so the arrowhead is never covered by the card
+      const x2 = state.pos[to].x - 12, y2 = state.pos[to].y + NH / 2;
+      let x1, y1;
+      if (from < 0) {
+        const gh = ghost.byKey["manual"];
+        if (!gh) return;
+        x1 = gh.x + GW; y1 = gh.y + GH / 2; dashed = true;
+      } else {
+        if (!state.pos[from] || !visibleNode(from)) return;
+        x1 = state.pos[from].x + NW + 4; y1 = state.pos[from].y + NH / 2;
+      }
+      const c = edgeCurve(x1, y1, x2, y2);
+      d = c.d; p0 = c.p0; lx = c.mid.x; ly = c.mid.y - 16;
     }
-    if (!visibleNode(to)) return;
-    const color = EDGE_COLORS[e.type] || "#fff";
-    const mx = (p1.x + p2.x) / 2;
-    const d = `M${p1.x},${p1.y} C${mx},${p1.y} ${mx},${p2.y} ${p2.x},${p2.y}`;
     const g = el("g", { class: "edge-g" }, vp);
     el("path", { d, class: "edge-hit", "data-id": id }, g);
-    const vis = el("path", {
-      d, class: "edge" + (state.selected?.kind === "edge" && state.selected.id === id ? " selected" : ""),
-      stroke: color, "stroke-width": state.selected?.kind === "edge" && state.selected.id === id ? 3.5 : 2.2,
-      "marker-end": `url(#arr-${e.type})`, opacity: from < 0 ? 0.85 : 1,
-      "stroke-dasharray": from < 0 ? "7 5" : "none",
+    el("circle", { cx: p0.x, cy: p0.y, r: 3, fill: color }, g);
+    el("path", {
+      d, class: "edge" + (sel ? " selected" : ""),
+      stroke: color, "stroke-width": sel ? 3.4 : 2.2,
+      "marker-end": `url(#arr-${e.type})`,
+      "stroke-dasharray": dashed ? "7 5" : "none",
     }, g);
-    // edge label chip
-    const lx = (p1.x + p2.x) / 2, ly = (p1.y + p2.y) / 2;
-    const lbl = el("g", { transform: `translate(${lx},${ly})`, style: "pointer-events:none" }, g);
-    const txt = `${e.type}:${edgeKey(e)}`.slice(0, 26);
-    const bg = el("rect", { x: -txt.length * 3.6 - 6, y: -10, width: txt.length * 7.2 + 12, height: 20, rx: 10, fill: TP().labelBg, stroke: color, "stroke-width": 1 }, lbl);
-    const te = el("text", { y: 4, "text-anchor": "middle", fill: color, "font-size": 11, "font-weight": 700 }, lbl);
-    te.textContent = txt;
+    if (state.showLabels || sel) {
+      const lbl = el("g", { transform: `translate(${lx},${ly})`, style: "pointer-events:none" }, g);
+      const txt = `${e.type}:${edgeKey(e)}`.slice(0, 26);
+      el("rect", { x: -txt.length * 3.4 - 7, y: -10, width: txt.length * 6.8 + 14, height: 20, rx: 10, fill: TP().labelBg, stroke: color, "stroke-width": 1.2 }, lbl);
+      const te = el("text", { y: 4, "text-anchor": "middle", fill: color, "font-size": 10.5, "font-weight": 700 }, lbl);
+      te.textContent = txt;
+    }
     g.addEventListener("mouseenter", (ev) => showEdgeTip(ev, e, id, from, to));
     g.addEventListener("mousemove", moveTip);
     g.addEventListener("mouseleave", hideTip);
@@ -326,31 +453,45 @@ function render() {
   });
 
   // nodes
+  const edgeStats = {};
+  (state.graph.edges || []).forEach((x) => {
+    const a = edgeEndpoints(x);
+    if (a.to >= 0) edgeStats[a.to] = edgeStats[a.to] || { in: 0, out: 0 }, edgeStats[a.to].in++;
+    if (a.from >= 0) edgeStats[a.from] = edgeStats[a.from] || { in: 0, out: 0 }, edgeStats[a.from].out++;
+  });
   state.graph.nodes.forEach((n, i) => {
     if (!visibleNode(i)) return;
     const p = state.pos[i];
+    if (!p) return;
     const r = n.request || {};
-    const isCsv = n.kind === "csv" || n.ignorefirstLine !== undefined && n.filename;
+    const isCsv = n.kind === "csv" || !!n.filename;
     const method = r.method || (isCsv ? "CSV" : "?");
-    const mc = METHOD_COLORS[method] || "#a78bfa";
+    const mc = isCsv ? "#b45309" : (METHOD_COLORS[method] || "#64748b");
+    const st = edgeStats[i] || { in: 0, out: 0 };
     const g = el("g", {
       class: "node-card" + (state.selected?.kind === "node" && state.selected.id === i ? " selected" : "") + (isCsv ? " csv" : ""),
       transform: `translate(${p.x},${p.y})`, "data-id": i,
     }, vp);
-    el("rect", { class: "body", width: NW, height: NH, rx: 13 }, g);
-    // method badge
-    el("rect", { x: 10, y: 10, width: Math.max(52, method.length * 9 + 16), height: 22, rx: 11, fill: mc }, g);
-    const mt = el("text", { x: 10 + Math.max(52, method.length * 9 + 16) / 2, y: 25, "text-anchor": "middle", "font-size": 12, "font-weight": 800, fill: "#ffffff" }, g);
+    el("rect", { class: "body", width: NW, height: NH, rx: 15 }, g);
+    el("rect", { x: 2, y: 9, width: 5, height: NH - 18, rx: 2.5, fill: mc }, g); // accent bar
+    // method pill
+    const bw = Math.max(58, method.length * 8.5 + 18);
+    el("rect", { x: 18, y: 13, width: bw, height: 23, rx: 11.5, fill: mc }, g);
+    const mt = el("text", { x: 18 + bw / 2, y: 29, "text-anchor": "middle", "font-size": 11.5, "font-weight": 800, fill: "#ffffff" }, g);
     mt.textContent = method;
-    const idxT = el("text", { x: NW - 12, y: 25, "text-anchor": "end", "font-size": 11, fill: TP().sub }, g);
-    idxT.textContent = "node " + i;
-    const pathT = el("text", { x: 12, y: 50, "font-size": 12.5, "font-weight": 700, fill: TP().title }, g);
-    pathT.textContent = isCsv ? ("📄 " + (n.filename || "csv")).slice(0, 30) : shortPath(r.url || "").slice(0, 30);
-    const hostT = el("text", { x: 12, y: 67, "font-size": 11, fill: TP().sub }, g);
+    const idxT = el("text", { x: NW - 14, y: 29, "text-anchor": "end", "font-size": 11, "font-weight": 700, fill: TP().sub }, g);
+    idxT.textContent = "N" + i;
+    const pathT = el("text", { x: 18, y: 61, "font-size": 13, "font-weight": 700, fill: TP().title }, g);
+    pathT.textContent = isCsv
+      ? ("📄 " + String(n.filename || "csv").split("/").pop()).slice(0, 28)
+      : shortPath(r.url || "").slice(0, 30);
+    const hostT = el("text", { x: 18, y: 79, "font-size": 11, fill: TP().sub }, g);
     const q = (r.queryParams || []).length, h = (r.headers || []).length;
     hostT.textContent = isCsv
       ? `vars=${(n.variablesName || "").slice(0, 28)}`
       : `${hostOf(r.url || "").slice(0, 30)} · idx=${(n.indexs || []).join(",") || "—"} · H${h}/Q${q}`;
+    const stT = el("text", { x: 18, y: 94, "font-size": 10.5, fill: TP().sub }, g);
+    stT.textContent = `↓ ${st.in} in · ↑ ${st.out} out`;
     g.addEventListener("mouseenter", (ev) => showNodeTip(ev, n, i));
     g.addEventListener("mousemove", moveTip);
     g.addEventListener("mouseleave", hideTip);
@@ -389,14 +530,37 @@ function applyView() {
   const vp = svg.querySelector("#viewport");
   if (vp) vp.setAttribute("transform", `translate(${state.view.x},${state.view.y}) scale(${state.view.k})`);
 }
+function fitView() {
+  const ids = Object.keys(state.pos);
+  if (!ids.length) return;
+  const hasGhost = (state.graph.edges || []).some((e) => {
+    const a = edgeEndpoints(e);
+    return a.from < 0 && a.to >= 0 && state.pos[a.to];
+  });
+  const W = svg.clientWidth || 900, H = svg.clientHeight || 560;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  ids.forEach((k) => {
+    const p = state.pos[k];
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x + NW); y1 = Math.max(y1, p.y + NH);
+  });
+  if (hasGhost) x0 -= 270;
+  const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
+  const k = Math.min(1.15, Math.min((W - 80) / bw, (H - 80) / bh));
+  state.view.k = k;
+  state.view.x = (W - bw * k) / 2 - x0 * k;
+  state.view.y = (H - bh * k) / 2 - y0 * k;
+  applyView();
+}
 function svgPoint(ev) {
   const r = svg.getBoundingClientRect();
   return { x: ev.clientX - r.left, y: ev.clientY - r.top };
 }
-$("#fitBtn").onclick = () => { state.view = { x: 20, y: 20, k: 1 }; applyView(); };
+$("#fitBtn").onclick = () => fitView();
 $("#resetZoomBtn").onclick = () => { state.view.k = 1; applyView(); };
 $("#nodeSearch").oninput = (e) => { state.nodeFilter = e.target.value.toLowerCase(); render(); };
 $("#edgeTypeFilter").onchange = () => render();
+$("#labelsBtn").onclick = () => { state.showLabels = !state.showLabels; $("#labelsBtn").classList.toggle("active", state.showLabels); render(); };
 
 /* ---------- tooltip ---------- */
 const tip = $("#tooltip");
@@ -566,7 +730,7 @@ $("#importGraphFile").onchange = (e) => {
   rd.onload = () => {
     try {
       state.graph = JSON.parse(rd.result);
-      state.pos = {}; state.selected = null;
+      state.pos = {}; state.selected = null; state._fitOnce = false;
       afterGraphLoaded();
     } catch { alert("Invalid graph.json"); }
   };
