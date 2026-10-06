@@ -16,7 +16,9 @@ import xml.etree.ElementTree as ET
 from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from pydantic import BaseModel, Field
 
 from . import config as app_config
@@ -29,6 +31,18 @@ from .jmx_correlate import correlate
 from .jmx_load import Workload, apply_workload
 
 app = FastAPI(title="Load Test Generator", version="2.0.0")
+
+_STATIC = Path(__file__).with_name("static")
+if _STATIC.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    idx = _STATIC / "index.html"
+    if idx.is_file():
+        return FileResponse(str(idx), media_type="text/html")
+    return {"message": "UI not built — see /docs"}
 
 
 # ---------- helpers ----------

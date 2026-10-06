@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Load Test Generator — HAR → Graph → JMX</title>
+<link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<header class="topbar glass">
+  <div class="brand">
+    <div class="logo">⚡</div>
+    <div>
+      <div class="brand-title">Load Test Generator</div>
+      <div class="brand-sub">HAR &rarr; dependency graph &rarr; ready-to-run JMX</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="theme-switch" id="themeSwitch" data-tip-below="Switch dark / light mode" aria-label="Toggle dark mode"><span class="knob"><svg class="sun" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#e6c86e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></button>
+    <span id="healthBadge" class="health unknown" title="GET /health"><span class="dot"></span><span id="healthText">checking…</span></span>
+    <button class="btn ghost" id="configBtn">⚙ Config <small>GET/PUT /config</small></button>
+    <a class="btn ghost" href="/docs" target="_blank">API docs</a>
+  </div>
+</header>
+
+<nav class="steps glass">
+  <div class="step active" data-step="1"><span class="n">1</span><div><b>Upload &amp; Config</b><i>POST /graphs/build + workload</i></div></div>
+  <div class="step-arrow">→</div>
+  <div class="step" data-step="2"><span class="n">2</span><div><b>Dependency Graph</b><i>visualize · hover · edit edges</i></div></div>
+  <div class="step-arrow">→</div>
+  <div class="step" data-step="3"><span class="n">3</span><div><b>Confirm &amp; JMX</b><i>POST /jmx/build · download</i></div></div>
+</nav>
+
+<main>
+  <!-- STEP 1 -->
+  <section id="panel-1" class="panel glass active">
+    <div class="grid2">
+      <div class="card">
+        <div class="s1-head"><h2>HAR file</h2><span class="pill" id="modePill">mode: lcs</span></div>
+        <label class="dropzone dz-large" id="dropzone" data-tip="Recorded HTTP traffic. Sent to the build APIs — nothing is stored on the server.">
+          <input type="file" id="harFile" accept=".har,.json,application/json" hidden />
+          <div class="dz-icon"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg></div>
+          <div class="dz-title" id="harName">Drop HAR file here or browse</div>
+          <div class="muted small" id="harMeta">No file selected</div>
+        </label>
+        <div class="row s1-options">
+          <label class="switch"><input type="checkbox" id="useLlm" /><span></span> LLM matcher</label>
+          <i class="info" data-tip="Match fields with the configured LLM instead of text similarity. Slower, but smarter.">?</i>
+          <button class="btn ghost sm" id="clearHarBtn" hidden data-tip="Remove the selected file">✕</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="s1-head">
+          <h2>Load profile</h2>
+          <button class="btn ghost sm" id="addWorkloadBtn" data-tip-right="Each row becomes one UltimateThreadGroup entry">+ Add row</button>
+        </div>
+        <div class="workload-head">
+          <span data-tip="Concurrent virtual users">threads</span><span data-tip="Initial delay before starting (seconds)">delay</span><span data-tip="Ramp-up time (seconds)">startup</span><span data-tip="Time holding the full load (seconds)">hold</span><span data-tip="Shutdown time (seconds)">shutdown</span><span></span>
+        </div>
+        <div id="workloadRows"></div>
+        <div class="row s1-options">
+          <label class="switch"><input type="checkbox" id="autoGraph" checked /><span></span> Auto graph</label>
+          <i class="info" data-tip="If no graph was built, generate one automatically during JMX export.">?</i>
+        </div>
+      </div>
+    </div>
+    <div class="s1-actions">
+      <button class="btn primary big" id="buildGraphBtn" data-tip="Upload the HAR and detect endpoint dependencies">Build dependency graph →</button>
+      <button class="btn ghost" id="autoJmxBtn" data-tip="Skip the graph editor and generate the JMX directly">Quick JMX</button>
+    </div>
+    <div id="buildStatus" class="status center"></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section id="panel-2" class="panel glass">
+    <div class="graph-toolbar">
+      <div class="gt-left">
+        <strong id="graphStats">No graph yet</strong>
+        <span class="pill" id="graphMode">mode: —</span>
+        <span class="pill" id="selPill">nothing selected</span>
+      </div>
+      <div class="gt-right">
+        <input id="nodeSearch" class="input sm" placeholder="🔍 filter nodes (url / method)…" />
+        <select id="edgeTypeFilter" class="input sm" title="POST /graphs/edges/list type filter">
+          <option value="">all edge types</option>
+          <option>url</option><option>header</option><option>queryparam</option>
+          <option>cookie</option><option>bodyue</option><option>bodyjson</option>
+        </select>
+        <button class="btn ghost sm" id="fitBtn">⤢ Fit</button>
+        <button class="btn ghost sm" id="resetZoomBtn">1:1</button>
+        <button class="btn ghost sm" id="exportGraphBtn">⬇ graph.json</button>
+        <label class="btn ghost sm" style="cursor:pointer">⬆ import <input type="file" id="importGraphFile" accept=".json" hidden /></label>
+        <button class="btn primary sm" id="goJmxBtn">Confirm dependencies →</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="graph-layout">
+      <div class="canvas-wrap">
+        <svg id="graphSvg" width="100%" height="560"></svg>
+        <div id="tooltip" class="tooltip hidden"></div>
+        <div id="emptyGraph" class="empty-graph">Build a graph from Step 1 to visualize endpoints here.<br/>Nodes = endpoints · Edges = dependencies (hover for details).</div>
+      </div>
+      <aside class="side">
+        <div class="tabs">
+          <button class="tab active" data-tab="details">Details</button>
+          <button class="tab" data-tab="edges">Edges</button>
+          <button class="tab" data-tab="add">Add edge</button>
+          <button class="tab" data-tab="describe">Describe</button>
+        </div>
+        <div class="tabbody active" id="tab-details"><div id="detailBox" class="muted">Click a node or edge in the canvas.<br/><br/>• <b>Node</b> card shows <code>METHOD</code> + short path.<br/>• Hover shows full URL, HAR indices, counts.<br/>• <b>Edge</b> hover shows type, key, producer → consumer, extracted variable.</div></div>
+        <div class="tabbody" id="tab-edges">
+          <div class="row">
+            <input id="filterToIdx" class="input sm" type="number" min="0" placeholder="to_idx…" title="to_idx filter" />
+            <button class="btn ghost sm" id="refreshEdgesBtn">↻ list <small>/edges/list</small></button>
+          </div>
+          <div id="edgesTable" class="edges-table"></div>
+          <div class="hint">Edit = <code>POST /graphs/edges/edit</code> · Delete = <code>POST /graphs/edges/delete</code></div>
+        </div>
+        <div class="tabbody" id="tab-add">
+          <form id="addEdgeForm" class="form">
+            <div class="frow"><label>to (node idx) *</label><input id="ae_to" class="input" type="number" min="0" required placeholder="e.g. 2" /></div>
+            <div class="frow"><label>type *</label><select id="ae_type" class="input"><option>url</option><option>header</option><option>queryparam</option><option>cookie</option><option>bodyue</option><option>bodyjson</option></select></div>
+            <div class="frow"><label>key * <small>header/query/body name or subPath</small></label><input id="ae_key" class="input" required placeholder="e.g. Authorization / userId" /></div>
+            <div class="frow2">
+              <div><label>from (node idx)</label><input id="ae_from" class="input" type="number" min="0" placeholder="—" /></div>
+              <div><label>resp_name</label><input id="ae_resp_name" class="input" placeholder="producer field" /></div>
+            </div>
+            <div class="frow2">
+              <div><label>resp_value</label><input id="ae_resp_value" class="input" placeholder="optional" /></div>
+              <div><label>resp_xpath</label><input id="ae_resp_xpath" class="input" placeholder="optional" /></div>
+            </div>
+            <div class="frow2">
+              <div><label>literal</label><input id="ae_literal" class="input" placeholder="manual value" /></div>
+              <div><label>csv <small>file:vars</small></label><input id="ae_csv" class="input" placeholder="data/users.csv:username" /></div>
+            </div>
+            <div class="frow2">
+              <div><label>from_har_idx</label><input id="ae_from_har" class="input" type="number" value="0" /></div>
+              <div><label>to_har_idx</label><input id="ae_to_har" class="input" type="number" value="0" /></div>
+            </div>
+            <button class="btn primary" type="submit">➕ Add edge <small>/edges/add</small></button>
+            <div id="addEdgeStatus" class="status"></div>
+          </form>
+        </div>
+        <div class="tabbody" id="tab-describe">
+          <button class="btn ghost sm" id="describeBtn">📝 Describe <small>/graphs/describe</small></button>
+          <pre id="describeOut" class="codebox">No description yet.</pre>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section id="panel-3" class="panel glass">
+    <div class="grid2">
+      <div class="card">
+        <h2>✅ Confirm &amp; generate JMX</h2>
+        <p class="muted">Sends <code>POST /jmx/build</code> with your HAR + confirmed <code>graph.json</code> + workload rows.</p>
+        <div id="confirmSummary" class="confirm-summary muted">No graph confirmed yet — go back to Step 2.</div>
+        <div class="row">
+          <button class="btn primary" id="buildJmxBtn">🚀 Build JMX script</button>
+          <button class="btn ghost" id="downloadJmxBtn" disabled>⬇ Download .jmx</button>
+        </div>
+        <div id="jmxStatus" class="status"></div>
+      </div>
+      <div class="card">
+        <h2>JMX preview <small class="muted" id="jmxMeta">—</small></h2>
+        <pre id="jmxPreview" class="codebox tall">JMX XML will appear here after generation.</pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- edit edge modal -->
+<div id="editModal" class="modal hidden">
+  <div class="modal-card glass">
+    <h3>Edit edge <span class="pill" id="editEdgeId"></span> <small class="muted">POST /graphs/edges/edit</small></h3>
+    <label>key <small>(subPath / header_name / query_param_name / name by type)</small></label>
+    <input id="editKey" class="input" />
+    <label>dependency value <small>(dependency.name)</small></label>
+    <input id="editValue" class="input" />
+    <div class="row end"><button class="btn ghost" id="editCancel">Cancel</button><button class="btn primary" id="editSave">Save</button></div>
+  </div>
+</div>
+
+<!-- config modal -->
+<div id="configModal" class="modal hidden">
+  <div class="modal-card glass wide">
+    <div class="m-head"><h3>Runtime config</h3><button class="icon-btn" id="configX" data-tip-below="Close">✕</button></div>
+    <div class="cfg-sec">Environment</div>
+    <div class="frow2">
+      <div><label>OPENAI_API_KEY <i class="info" data-tip="Token used when the LLM provider is openai-compatible.">?</i></label><input id="cfg_openai" class="input" type="password" autocomplete="off" /></div>
+      <div><label>OLLAMA_HOST <i class="info" data-tip="Ollama server address, also exported as an environment variable.">?</i></label><input id="cfg_ollama" class="input" /></div>
+    </div>
+    <div class="cfg-sec">LLM matcher</div>
+    <div class="frow2">
+      <div><label>provider <i class="info" data-tip="LLM backend: ollama, openai-compatible, or stub for testing.">?</i></label><select id="cfg_provider" class="input"><option>ollama</option><option>openai-compatible</option><option>stub</option></select></div>
+      <div><label>endpoint <i class="info" data-tip="Base URL of the LLM service.">?</i></label><input id="cfg_endpoint" class="input" /></div>
+    </div>
+    <div class="frow2">
+      <div><label>model <i class="info" data-tip="Model name, e.g. qwen2.5-coder:7b.">?</i></label><input id="cfg_model" class="input" /></div>
+      <div><label>timeout (sec) <i class="info" data-tip="Request timeout in seconds.">?</i></label><input id="cfg_timeout" class="input" type="number" step="0.5" /></div>
+    </div>
+    <div class="row cfg-switches">
+      <label class="switch"><input type="checkbox" id="cfg_fallback" /><span></span> fallback_to_lcs</label>
+      <i class="info" data-tip="If the LLM is unreachable or unsure, fall back to text similarity.">?</i>
+      <label class="switch"><input type="checkbox" id="cfg_cache" /><span></span> cache_enabled</label>
+      <i class="info" data-tip="Cache LLM answers for repeated field comparisons.">?</i>
+    </div>
+    <div class="row end"><button class="btn ghost" id="configCancel">Close</button><button class="btn primary" id="configSave">Save config</button></div>
+    <div id="configStatus" class="status"></div>
+  </div>
+</div>
+
+<footer class="muted small center">Covers: <code>/health</code> · <code>/config</code> · <code>/graphs/build</code> · <code>/graphs/describe</code> · <code>/graphs/edges/list|add|delete|edit</code> · <code>/jmx/build</code></footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
