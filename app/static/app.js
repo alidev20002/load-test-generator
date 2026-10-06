@@ -14,23 +14,23 @@ const LIGHT_EDGE = {
   cookie: "#b45309", bodyue: "#be185d", bodyjson: "#1d4ed8",
 };
 const DARK_EDGE = {
-  url: "#5aa9e6", header: "#a78bfa", queryparam: "#4ade80",
-  cookie: "#e6a23c", bodyue: "#f472b6", bodyjson: "#7aa5f8",
+  url: "#a78bfa", header: "#c084fc", queryparam: "#4ade80",
+  cookie: "#fbbf24", bodyue: "#f472b6", bodyjson: "#67e8f9",
 };
 const LIGHT_METHOD = {
   GET: "#15803d", POST: "#1d4ed8", PUT: "#b45309",
   DELETE: "#b91c1c", PATCH: "#6d28d9", HEAD: "#64748b", OPTIONS: "#64748b",
 };
 const DARK_METHOD = {
-  GET: "#2fa97c", POST: "#5aa9e6", PUT: "#d0973c",
-  DELETE: "#d06969", PATCH: "#a78bfa", HEAD: "#8b98b3", OPTIONS: "#8b98b3",
+  GET: "#4ade80", POST: "#a78bfa", PUT: "#fbbf24",
+  DELETE: "#fb7185", PATCH: "#c084fc", HEAD: "#a79fd1", OPTIONS: "#a79fd1",
 };
 let EDGE_COLORS = { ...LIGHT_EDGE };
 let METHOD_COLORS = { ...LIGHT_METHOD };
 /* theme-aware svg text palette */
 function TP() {
   return document.documentElement.dataset.theme === "dark"
-    ? { labelBg: "#1c2436", title: "#e6ecf5", sub: "#8b98b3" }
+    ? { labelBg: "#1e1832", title: "#f2f0ff", sub: "#a79fd1" }
     : { labelBg: "#ffffff", title: "#22304a", sub: "#63738c" };
 }
 function setTheme(t) {
@@ -394,8 +394,8 @@ function render() {
   ghost.list.forEach((gh, gi) => {
     gh.x = GX; gh.y = 60 + gi * 64;
     const gg = el("g", { transform: `translate(${GX},${gh.y})` }, vp);
-    el("rect", { width: GW, height: GH, rx: 19, fill: "none", stroke: "#8b98b3", "stroke-width": 1.4, "stroke-dasharray": "6 4" }, gg);
-    const gt = el("text", { x: GW / 2, y: GH / 2 + 4.5, "text-anchor": "middle", "font-size": 12, "font-weight": 700, fill: "#8b98b3" }, gg);
+    el("rect", { width: GW, height: GH, rx: 19, fill: "none", stroke: "#a79fd1", "stroke-width": 1.4, "stroke-dasharray": "6 4" }, gg);
+    const gt = el("text", { x: GW / 2, y: GH / 2 + 4.5, "text-anchor": "middle", "font-size": 12, "font-weight": 700, fill: "#a79fd1" }, gg);
     gt.textContent = "✎ " + gh.label;
   });
 

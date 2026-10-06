@@ -14,16 +14,16 @@
 }
 [data-theme="dark"]{
   color-scheme:dark;
-  --bg:#0f141f; --card:#1a2130; --inset:#202839; --input:#141b29;
-  --stroke:#2e3c55; --txt:#dbe3f0; --muted:#8b98b3; --acc:#5f93cf;
-  --ok:#3fb97f; --warn:#d0973c; --bad:#d06969;
-  --pill-bg:#1d2a40; --pill-bd:#31415e; --pill-tx:#a9c4e8;
-  --switch-off:#3a4a68; --canvas:#131926; --dots:#26314a;
-  --node-fill:#1c2436; --node-stroke:#3a4a68;
-  --code-bg:#141b29; --code-tx:#b9c6da;
-  --tip-bg:#e6ecf5; --tip-tx:#1a2130;
-  --shadow:0 2px 12px rgba(0,0,0,.45);
-  --hover:#232d42; --info-bg:#2b3a55;
+  --bg:#100d1a; --card:#1a1428; --inset:#211a35; --input:#161128;
+  --stroke:#453a68; --txt:#f0eefc; --muted:#a79fd1; --acc:#a78bfa;
+  --ok:#4ade80; --warn:#fbbf24; --bad:#fb7185;
+  --pill-bg:#2a2142; --pill-bd:#5a4d8f; --pill-tx:#c9bfff;
+  --switch-off:#463a68; --canvas:#141020; --dots:#372b56;
+  --node-fill:#1e1832; --node-stroke:#5a4d8f;
+  --code-bg:#161128; --code-tx:#c5bdf0;
+  --tip-bg:#efeaff; --tip-tx:#1a1025;
+  --shadow:0 4px 20px rgba(0,0,0,.55);
+  --hover:#272044; --info-bg:#2d2549;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:"Segoe UI",Inter,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;padding:18px 18px 40px;transition:background .3s,color .3s;overflow-x:hidden;overflow-x:clip}
@@ -38,8 +38,10 @@ code{background:var(--code-bg);color:var(--code-tx);padding:1px 6px;border-radiu
 /* theme switch */
 .theme-switch{position:relative;width:62px;height:30px;border-radius:999px;border:1px solid var(--stroke);background:var(--switch-off);cursor:pointer;padding:0;transition:background .3s}
 .theme-switch .knob{position:absolute;top:2px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;display:grid;place-items:center;transition:left .3s,background .3s;box-shadow:0 1px 4px rgba(0,0,0,.35)}
-[data-theme="dark"] .theme-switch{background:#2e3c55}
-[data-theme="dark"] .theme-switch .knob{left:33px;background:#101724}
+[data-theme="dark"] .theme-switch{background:#453a68}
+[data-theme="dark"] .theme-switch .knob{left:33px;background:#100d1a}
+/* dark theme: dark text on bright accent fills reads better */
+[data-theme="dark"] .btn.primary,[data-theme="dark"] .step .n,[data-theme="dark"] .logo{color:#1a1025}
 .theme-switch .moon{display:none}
 [data-theme="dark"] .theme-switch .moon{display:block}
 [data-theme="dark"] .theme-switch .sun{display:none}
