@@ -1,7 +1,7 @@
 /* Load Test Generator GUI — covers all backend APIs */
 const $ = (s) => document.querySelector(s);
 const state = {
-  harFile: null, graph: null, mode: "lcs",
+  harFile: null, graph: null, mode: "LCS",
   useLlm: false, selected: null, // {kind:'node'|'edge', id}
   hiddenTypes: new Set(), nodeFilter: "", showLabels: true,
   jmxBlob: null, jmxText: "",
