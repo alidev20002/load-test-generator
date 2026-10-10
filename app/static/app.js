@@ -229,6 +229,23 @@ function edgeVar(e) {
   if (e.structuredObject) return e.structuredObject.name || "structured";
   return "—";
 }
+function isCsvNode(n) {
+  return !!(n && (n.kind === "csv" || n.filename));
+}
+/* endpoint nodes only (CSV rows are values, not linkable endpoints).
+   Backend indexes edges over non-CSV nodes, so the dropdown value IS the
+   backend index; the label keeps the canvas id (N<front>) for recognition. */
+function endpointNodes() {
+  if (!state.graph) return [];
+  const out = [];
+  state.graph.nodes.forEach((n, front) => {
+    if (isCsvNode(n)) return;
+    const back = out.length;
+    const r = n.request || {};
+    out.push({ front, back, n, label: `N${front} [${r.method || "?"}] ${shortPath(r.url || "")}` });
+  });
+  return out;
+}
 
 /* ---------- layout: layered DAG (longest-path + barycenter crossing reduction) ---------- */
 const NW = 260, NH = 100, DX = 380, DY = 210;
@@ -404,7 +421,7 @@ function afterGraphLoaded() {
     state._fitOnce = true;
     requestAnimationFrame(() => requestAnimationFrame(() => fitView()));
   }
-  refreshEdgesTable(); updateConfirmSummary();
+  refreshEdgesTable(); refreshAddEdgeNodeOptions(); updateConfirmSummary();
 }
 function autoLayout() {
   state._userMoved = {};
@@ -747,26 +764,146 @@ async function refreshEdgesTable() {
     box.appendChild(d);
   });
 }
+/* ---------- add-edge form: node dropdowns + per-mode validation ---------- */
+function aeFrontOf(backIdx) {
+  const ep = endpointNodes();
+  const f = ep.find((x) => x.back === backIdx);
+  return f ? f.front : -1;
+}
+function refreshAddEdgeNodeOptions() {
+  const fromSel = $("#ae_from"), toSel = $("#ae_to");
+  if (!fromSel || !toSel) return;
+  const prevFrom = fromSel.value, prevTo = toSel.value;
+  const eps = endpointNodes();
+  fromSel.innerHTML = "";
+  toSel.innerHTML = "";
+  if (!eps.length) {
+    fromSel.innerHTML = `<option value="">— no nodes —</option>`;
+    toSel.innerHTML = `<option value="">— no nodes —</option>`;
+  } else {
+    eps.forEach((x) => {
+      const o1 = document.createElement("option");
+      o1.value = String(x.back); o1.textContent = x.label;
+      fromSel.appendChild(o1);
+      const o2 = document.createElement("option");
+      o2.value = String(x.back); o2.textContent = x.label;
+      toSel.appendChild(o2);
+    });
+    // sensible defaults: first node as producer, second (or first) as consumer
+    fromSel.value = [...fromSel.options].some((o) => o.value === prevFrom) ? prevFrom : String(eps[0].back);
+    toSel.value = [...toSel.options].some((o) => o.value === prevTo) ? prevTo : String(eps[Math.min(1, eps.length - 1)].back);
+  }
+  syncAeHarIdx(); updateAeModeUI(); updateAeHint();
+}
+function syncAeHarIdx() {
+  // prefill HAR occurrence indices from the chosen nodes so from/to_index match the graph
+  const eps = endpointNodes();
+  const fb = Number($("#ae_from")?.value), tb = Number($("#ae_to")?.value);
+  const f = eps.find((x) => x.back === fb), t = eps.find((x) => x.back === tb);
+  if (f && f.n.indexs?.length) {
+    const elx = $("#ae_from_har");
+    if (elx && (elx.value === "0" || elx.dataset.auto === "1")) { elx.value = String(f.n.indexs[0]); elx.dataset.auto = "1"; }
+  }
+  if (t && t.n.indexs?.length) {
+    const elx = $("#ae_to_har");
+    if (elx && (elx.value === "0" || elx.dataset.auto === "1")) { elx.value = String(t.n.indexs[0]); elx.dataset.auto = "1"; }
+  }
+}
+function updateAeModeUI() {
+  const mode = $("#ae_mode")?.value || "link";
+  const isLink = mode === "link", isLit = mode === "literal", isCsv = mode === "csv";
+  if ($("#ae_link_fields")) $("#ae_link_fields").style.display = isLink ? "" : "none";
+  const lit = $("#ae_literal"), csv = $("#ae_csv");
+  if (lit) lit.closest("div").style.opacity = isLit ? "1" : ".45";
+  if (csv) csv.closest("div").style.opacity = isCsv ? "1" : ".45";
+  if ($("#ae_from")) $("#ae_from").disabled = !isLink;
+  if ($("#ae_from_sel")) $("#ae_from_sel").disabled = !isLink;
+  const rh = $("#ae_resp_name");
+  if (rh) rh.required = isLink;
+  if (lit) lit.required = isLit;
+  if (csv) csv.required = isCsv;
+}
+function updateAeHint() {
+  const box = $("#ae_hint");
+  if (!box) return;
+  const mode = $("#ae_mode")?.value || "link";
+  const eps = endpointNodes();
+  const fb = Number($("#ae_from")?.value), tb = Number($("#ae_to")?.value);
+  const fl = eps.find((x) => x.back === fb)?.label || "—";
+  const tl = eps.find((x) => x.back === tb)?.label || "—";
+  const key = $("#ae_key")?.value.trim() || "—";
+  const type = $("#ae_type")?.value || "—";
+  box.textContent = mode === "link"
+    ? `Will create: [${type}] ${key} · producer ${fl} → consumer ${tl}`
+    : mode === "literal"
+      ? `Will create manual value → consumer ${tl} · [${type}] ${key}`
+      : `Will create CSV value → consumer ${tl} · [${type}] ${key}`;
+}
+["ae_mode", "ae_from", "ae_to", "ae_type", "ae_key"].forEach((id) => {
+  document.getElementById(id)?.addEventListener("change", () => {
+    if (id === "ae_mode") updateAeModeUI();
+    if (id === "ae_from" || id === "ae_to") syncAeHarIdx();
+    updateAeHint();
+  });
+  document.getElementById(id)?.addEventListener("input", updateAeHint);
+});
+$("#ae_from_sel").onclick = () => {
+  if (state.selected?.kind !== "node") return setStatus($("#addEdgeStatus"), "Click a node on the canvas first, then “use selected node”.", false);
+  const eps = endpointNodes();
+  const m = eps.find((x) => x.front === state.selected.id);
+  if (!m) return setStatus($("#addEdgeStatus"), "Selected node is a CSV value row — pick an endpoint node.", false);
+  $("#ae_from").value = String(m.back); syncAeHarIdx(); updateAeHint();
+  setStatus($("#addEdgeStatus"), `Producer ← ${m.label}`, null);
+};
+$("#ae_to_sel").onclick = () => {
+  if (state.selected?.kind !== "node") return setStatus($("#addEdgeStatus"), "Click a node on the canvas first, then “use selected node”.", false);
+  const eps = endpointNodes();
+  const m = eps.find((x) => x.front === state.selected.id);
+  if (!m) return setStatus($("#addEdgeStatus"), "Selected node is a CSV value row — pick an endpoint node.", false);
+  $("#ae_to").value = String(m.back); syncAeHarIdx(); updateAeHint();
+  setStatus($("#addEdgeStatus"), `Consumer ← ${m.label}`, null);
+};
 $("#addEdgeForm").onsubmit = async (ev) => {
   ev.preventDefault();
   if (!state.graph) return setStatus($("#addEdgeStatus"), "Build a graph first.", false);
-  const val = (id) => $("#" + id).value.trim();
-  const body = { graph: state.graph, to: Number(val("ae_to")), type: val("ae_type"), key: val("ae_key") };
-  if (val("ae_from")) body.from = Number(val("ae_from"));
-  if (val("ae_resp_name")) body.resp_name = val("ae_resp_name");
-  if (val("ae_resp_value")) body.resp_value = val("ae_resp_value");
-  if (val("ae_resp_xpath")) body.resp_xpath = val("ae_resp_xpath");
-  if (val("ae_literal")) body.literal = val("ae_literal");
-  if (val("ae_csv")) body.csv = val("ae_csv");
+  const val = (id) => document.getElementById(id)?.value.trim() ?? "";
+  const mode = val("ae_mode") || "link";
+  const type = val("ae_type"), key = val("ae_key");
+  if (!key) return setStatus($("#addEdgeStatus"), "key is required (header/query/body name or subPath).", false);
+  const body = { graph: state.graph, to: Number(val("ae_to")), type, key };
+  if (mode === "link") {
+    if (val("ae_from") === "") return setStatus($("#addEdgeStatus"), "Pick a producer node (from).", false);
+    if (!val("ae_resp_name")) return setStatus($("#addEdgeStatus"), "resp_name is required in link mode — it is the field read from the producer response. (This was the old silent failure: from+to alone are not enough.)", false);
+    body.from = Number(val("ae_from"));
+    body.resp_name = val("ae_resp_name");
+    if (val("ae_resp_value")) body.resp_value = val("ae_resp_value");
+    if (val("ae_resp_xpath")) body.resp_xpath = val("ae_resp_xpath");
+  } else if (mode === "literal") {
+    if (!val("ae_literal")) return setStatus($("#addEdgeStatus"), "literal is required in literal mode.", false);
+    body.literal = val("ae_literal");
+  } else {
+    if (!val("ae_csv")) return setStatus($("#addEdgeStatus"), "csv is required in csv mode (format file:vars).", false);
+    body.csv = val("ae_csv");
+  }
   body.from_har_idx = Number(val("ae_from_har") || 0);
   body.to_har_idx = Number(val("ae_to_har") || 0);
   setStatus($("#addEdgeStatus"), "Adding… POST /graphs/edges/add", null);
-  const r = await fetch("/graphs/edges/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let r;
+  try {
+    r = await fetch("/graphs/edges/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { return setStatus($("#addEdgeStatus"), "Add failed (network): " + String(e).slice(0, 200), false); }
   if (!r.ok) return setStatus($("#addEdgeStatus"), "Add failed: " + (await r.text()).slice(0, 300), false);
   const j = await r.json();
   state.graph = j.graph;
-  setStatus($("#addEdgeStatus"), `✓ edge added (now ${j.edges} edges)`, true);
+  // make sure the new edge is not hidden by toolbar filters, then highlight it
+  const newId = (j.edge && typeof j.edge.id === "number") ? j.edge.id : j.edges - 1;
+  state.hiddenTypes.delete(type);
+  const tf = $("#edgeTypeFilter");
+  if (tf && tf.value && tf.value !== type) tf.value = "";
+  setStatus($("#addEdgeStatus"), `✓ edge ${newId} added (now ${j.edges} edges)`, true);
   afterGraphLoaded();
+  renderLegend();
+  select("edge", newId);
 };
 window.deleteEdge = async (id) => {
   if (!confirm(`Delete edge ${id}? (POST /graphs/edges/delete)`)) return;
@@ -872,4 +1009,5 @@ $("#downloadJmxBtn").onclick = () => {
   if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   setTheme(t);
 })();
+refreshAddEdgeNodeOptions();
 checkHealth();
