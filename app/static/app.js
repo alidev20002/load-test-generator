@@ -594,14 +594,18 @@ function render() {
       ev.stopPropagation();
       const start = svgPoint(ev);
       const ox = p.x, oy = p.y;
+      let dragged = false;
       const mv = (e2) => {
         const pt = svgPoint(e2);
+        if (Math.hypot(pt.x - start.x, pt.y - start.y) < 4) return; // plain click, not a drag
+        dragged = true;
         p.x = ox + (pt.x - start.x) / state.view.k;
         p.y = oy + (pt.y - start.y) / state.view.k;
         g.setAttribute("transform", `translate(${p.x},${p.y})`);
       };
       const up = () => {
         window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up);
+        if (!dragged) return; // let the click event select the node instead of wiping the DOM
         state._userMoved = state._userMoved || {};
         state._userMoved[i] = true;
         render();
@@ -820,6 +824,8 @@ function updateAeModeUI() {
   if ($("#ae_from_sel")) $("#ae_from_sel").disabled = !isLink;
   const rh = $("#ae_resp_name");
   if (rh) rh.required = isLink;
+  const rx = $("#ae_resp_xpath");
+  if (rx) rx.required = isLink;
   if (lit) lit.required = isLit;
   if (csv) csv.required = isCsv;
 }
@@ -833,13 +839,15 @@ function updateAeHint() {
   const tl = eps.find((x) => x.back === tb)?.label || "—";
   const key = $("#ae_key")?.value.trim() || "—";
   const type = $("#ae_type")?.value || "—";
+  const rn = $("#ae_resp_name")?.value.trim() || "—";
+  const rx = $("#ae_resp_xpath")?.value.trim() || "—";
   box.textContent = mode === "link"
-    ? `Will create: [${type}] ${key} · producer ${fl} → consumer ${tl}`
+    ? `Will create: [${type}] ${key} · producer ${fl} → consumer ${tl} · extract ${rn} @ ${rx}`
     : mode === "literal"
       ? `Will create manual value → consumer ${tl} · [${type}] ${key}`
       : `Will create CSV value → consumer ${tl} · [${type}] ${key}`;
 }
-["ae_mode", "ae_from", "ae_to", "ae_type", "ae_key"].forEach((id) => {
+["ae_mode", "ae_from", "ae_to", "ae_type", "ae_key", "ae_resp_name", "ae_resp_xpath"].forEach((id) => {
   document.getElementById(id)?.addEventListener("change", () => {
     if (id === "ae_mode") updateAeModeUI();
     if (id === "ae_from" || id === "ae_to") syncAeHarIdx();
@@ -873,11 +881,12 @@ $("#addEdgeForm").onsubmit = async (ev) => {
   const body = { graph: state.graph, to: Number(val("ae_to")), type, key };
   if (mode === "link") {
     if (val("ae_from") === "") return setStatus($("#addEdgeStatus"), "Pick a producer node (from).", false);
-    if (!val("ae_resp_name")) return setStatus($("#addEdgeStatus"), "resp_name is required in link mode — it is the field read from the producer response. (This was the old silent failure: from+to alone are not enough.)", false);
+    if (!val("ae_resp_name")) return setStatus($("#addEdgeStatus"), "resp_name is required in link mode — it is the field read from the producer response.", false);
+    if (!val("ae_resp_xpath")) return setStatus($("#addEdgeStatus"), "resp_xpath is required in link mode — it tells which part of the producer JSON to extract (e.g. $.data.token).", false);
     body.from = Number(val("ae_from"));
     body.resp_name = val("ae_resp_name");
+    body.resp_xpath = val("ae_resp_xpath");
     if (val("ae_resp_value")) body.resp_value = val("ae_resp_value");
-    if (val("ae_resp_xpath")) body.resp_xpath = val("ae_resp_xpath");
   } else if (mode === "literal") {
     if (!val("ae_literal")) return setStatus($("#addEdgeStatus"), "literal is required in literal mode.", false);
     body.literal = val("ae_literal");
