@@ -7,6 +7,7 @@ const state = {
   jmxBlob: null, jmxText: "",
   view: { x: 20, y: 20, k: 1 },
   pos: {}, // nodeIdx -> {x,y}
+  _userMoved: {}, // nodeIdx -> true (dragged by user, excluded from auto de-collision)
 };
 
 const LIGHT_EDGE = {
@@ -161,7 +162,7 @@ $("#buildGraphBtn").onclick = async () => {
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();
     state.graph = j.graph; state.mode = j.mode || (state.useLlm ? "LLM" : "LCS");
-    state.pos = {}; state.selected = null; state._fitOnce = false;
+    state.pos = {}; state.selected = null; state._fitOnce = false; state._userMoved = {};
     setStatus($("#buildStatus"), `✓ ${j.nodes} nodes · ${j.edges} edges (mode=${state.mode}) — open Step 2`, true);
     afterGraphLoaded();
     gotoStep(2);
@@ -240,15 +241,24 @@ function cubicAt(x0, y0, x1, y1, x2, y2, x3, y3, t) {
   };
 }
 
-/* smooth curve between two ports; back-edges bow downward so direction stays readable */
-function edgeCurve(x1, y1, x2, y2) {
+/* smooth curve between two ports; back-edges bow downward so direction stays readable.
+   `lane` spreads parallel edges between the same pair (-2,-1,0,1,2...) so they never overlap. */
+function edgeCurve(x1, y1, x2, y2, lane = 0, laneCount = 1) {
   let cx1, cy1, cx2, cy2;
   if (x2 - x1 > 40) {
+    // forward edge: fan out vertically, keep horizontal S-curve
+    const spread = lane * 26;
+    y1 += spread; y2 += spread;
     const c = Math.max(70, (x2 - x1) * 0.5);
-    cx1 = x1 + c; cy1 = y1; cx2 = x2 - c; cy2 = y2;
+    // add a slight vertical bow for parallel lanes so curves separate in the middle too
+    const bow = lane * 22;
+    cx1 = x1 + c; cy1 = y1 + bow; cx2 = x2 - c; cy2 = y2 - bow;
   } else {
-    const bow = 120 + Math.abs(y2 - y1) * 0.25;
-    cx1 = x1 + 90; cy1 = y1 + bow; cx2 = x2 - 90; cy2 = y2 + bow;
+    // back-edge / vertical pair: vary bow depth per lane so each arc is visible
+    const bow = 120 + Math.abs(y2 - y1) * 0.25 + Math.abs(lane) * 55 + (laneCount > 1 ? 0 : 0);
+    const dir = 1; // bow downward
+    const side = laneCount > 1 ? lane * 34 : 0;
+    cx1 = x1 + 90 + side; cy1 = y1 + bow * dir; cx2 = x2 - 90 + side; cy2 = y2 + bow * dir;
   }
   return {
     d: `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`,
@@ -257,7 +267,28 @@ function edgeCurve(x1, y1, x2, y2) {
   };
 }
 
-function computeLayout() {
+/* group visible edges by directed pair so parallel edges can be spread into lanes */
+function buildPairLanes(list) {
+  // list: [{e, id, from, to}]
+  const groups = {};
+  list.forEach((it) => {
+    const key = it.from + "→" + it.to;
+    (groups[key] = groups[key] || []).push(it);
+  });
+  const slotOf = {}; // edge id -> {lane, count}
+  Object.values(groups).forEach((arr) => {
+    // stable order: by type then key so lanes are deterministic
+    arr.sort((a, b) => String(a.e.type).localeCompare(String(b.e.type)) || (a.id - b.id));
+    const m = arr.length;
+    arr.forEach((it, k) => {
+      slotOf[it.id] = { lane: k - (m - 1) / 2, count: m, pos: k };
+    });
+  });
+  return slotOf;
+}
+
+function computeLayout(force = false) {
+  if (force) state.pos = {};
   const nodes = state.graph.nodes, edges = state.graph.edges || [];
   const n = nodes.length;
   const succ = nodes.map(() => []), pred = nodes.map(() => []);
@@ -305,17 +336,21 @@ function computeLayout() {
   };
   Object.values(perLayer).forEach((arr) => arr.sort((a, b) => minIdx(a) - minIdx(b)));
   const Ls = Object.keys(perLayer).map(Number).sort((a, b) => a - b);
-  for (let it = 0; it < 2; it++) {
+  for (let it = 0; it < 8; it++) {
     setOrder();
     for (const l of Ls.slice(1)) perLayer[l].sort((a, b) => (bary(a, pred[a]) - bary(b, pred[b])) || (minIdx(a) - minIdx(b)));
     setOrder();
     for (const l of Ls.slice().reverse().slice(1)) perLayer[l].sort((a, b) => (bary(a, succ[a]) - bary(b, succ[b])) || (minIdx(a) - minIdx(b)));
   }
+  // compact layers: drop empty columns left by cycle leftovers so the graph stays wide-open, not stretched
+  const compact = {};
+  Ls.forEach((l, ni) => { compact[l] = ni; });
   const maxCount = Math.max(1, ...Object.values(perLayer).map((a) => a.length));
   Object.entries(perLayer).forEach(([l, arr]) => {
+    const nl = compact[Number(l)];
     const offY = ((maxCount - arr.length) * DY) / 2;
     arr.forEach((v, k) => {
-      if (!state.pos[v]) state.pos[v] = { x: 60 + Number(l) * DX, y: 60 + offY + k * DY };
+      if (force || !state.pos[v]) state.pos[v] = { x: 60 + nl * DX, y: 60 + offY + k * DY };
     });
   });
   // isolated nodes: tidy grid below the main flow
@@ -324,8 +359,29 @@ function computeLayout() {
   iso.sort((a, b) => minIdx(a) - minIdx(b));
   const mainBottom = 60 + maxCount * DY;
   iso.forEach((v, k) => {
-    if (!state.pos[v]) state.pos[v] = { x: 60 + (k % 3) * DX, y: mainBottom + 60 + Math.floor(k / 3) * DY };
+    if (force || !state.pos[v]) state.pos[v] = { x: 60 + (k % 3) * DX, y: mainBottom + 60 + Math.floor(k / 3) * DY };
   });
+  // final de-collision: nudge apart any two cards that still share (nearly) the same center
+  // (can happen with dense cycles / re-imported graphs). Deterministic, keeps drag positions otherwise.
+  const placed = Object.keys(state.pos).map(Number);
+  for (let pass = 0; pass < 5; pass++) {
+    let moved = false;
+    for (let a = 0; a < placed.length; a++) {
+      for (let b = a + 1; b < placed.length; b++) {
+        const pa = state.pos[placed[a]], pb = state.pos[placed[b]];
+        if (!pa || !pb) continue;
+        const dx = Math.abs(pa.x - pb.x), dy = Math.abs(pa.y - pb.y);
+        if (dx < NW + 40 && dy < NH + 40) {
+          // push the later node down until free
+          if (force || !state._userMoved?.[placed[b]]) {
+            const ny = pa.y + NH + 60;
+            if (pb.y < ny) { pb.y = ny; moved = true; }
+          }
+        }
+      }
+    }
+    if (!moved) break;
+  }
 }
 
 /* ---------- render SVG ---------- */
@@ -342,8 +398,19 @@ function afterGraphLoaded() {
   $("#graphStats").textContent = `${state.graph.nodes.length} endpoints · ${state.graph.edges.length} dependencies`;
   $("#emptyGraph").style.display = state.graph.nodes.length ? "none" : "grid";
   renderLegend(); render();
-  if (!state._fitOnce) { fitView(); state._fitOnce = true; }
+  // defer fit until the panel is actually visible, so svg.clientWidth is real
+  // and the whole graph opens up readable on first view (no manual dragging needed)
+  if (!state._fitOnce) {
+    state._fitOnce = true;
+    requestAnimationFrame(() => requestAnimationFrame(() => fitView()));
+  }
   refreshEdgesTable(); updateConfirmSummary();
+}
+function autoLayout() {
+  state._userMoved = {};
+  computeLayout(true);
+  render();
+  fitView();
 }
 function renderLegend() {
   const L = $("#legend"); L.innerHTML = "";
@@ -399,22 +466,31 @@ function render() {
     gt.textContent = "✎ " + gh.label;
   });
 
-  // edges under the node cards
+  // edges under the node cards — parallel edges between the same pair get spread into lanes
+  const _visList = [];
   (state.graph.edges || []).forEach((e, id) => {
     if (typeFilter && e.type !== typeFilter) return;
     if (state.hiddenTypes.has(e.type)) return;
     const { from, to } = edgeEndpoints(e);
     if (to < 0 || !state.pos[to] || !visibleNode(to)) return;
+    if (from >= 0 && (!state.pos[from] || !visibleNode(from))) return;
+    if (from < 0 && !ghost.byKey["manual"]) return;
+    _visList.push({ e, id, from, to });
+  });
+  const slotOf = buildPairLanes(_visList);
+  _visList.forEach(({ e, id, from, to }) => {
     const color = EDGE_COLORS[e.type] || "#888";
     const sel = state.selected?.kind === "edge" && state.selected.id === id;
+    const slot = slotOf[id] || { lane: 0, count: 1, pos: 0 };
     let d, p0, lx, ly, dashed = false;
     if (from >= 0 && from === to) {
-      // self-loop arcs above the node so the arrow stays visible
+      // self-loops: stack arcs above the node, one height per parallel edge
       const nx = state.pos[to].x, ny = state.pos[to].y;
+      const h = 85 + slot.pos * 30;
       const sx = nx + NW - 50, ex = nx + 50;
-      d = `M${sx},${ny} C${sx + 50},${ny - 85} ${ex - 50},${ny - 85} ${ex},${ny}`;
+      d = `M${sx},${ny} C${sx + 50},${ny - h} ${ex - 50},${ny - h} ${ex},${ny}`;
       p0 = { x: sx, y: ny };
-      lx = nx + NW / 2; ly = ny - 72;
+      lx = nx + NW / 2; ly = ny - h + 12 + slot.pos * 2;
     } else {
       // stop before the target border so the arrowhead is never covered by the card
       const x2 = state.pos[to].x - 12, y2 = state.pos[to].y + NH / 2;
@@ -422,13 +498,13 @@ function render() {
       if (from < 0) {
         const gh = ghost.byKey["manual"];
         if (!gh) return;
-        x1 = gh.x + GW; y1 = gh.y + GH / 2; dashed = true;
+        // fan out manual edges along the ghost chip + target side
+        x1 = gh.x + GW; y1 = gh.y + GH / 2 + slot.lane * 10; dashed = true;
       } else {
-        if (!state.pos[from] || !visibleNode(from)) return;
         x1 = state.pos[from].x + NW + 4; y1 = state.pos[from].y + NH / 2;
       }
-      const c = edgeCurve(x1, y1, x2, y2);
-      d = c.d; p0 = c.p0; lx = c.mid.x; ly = c.mid.y - 16;
+      const c = edgeCurve(x1, y1, x2, y2, slot.lane, slot.count);
+      d = c.d; p0 = c.p0; lx = c.mid.x; ly = c.mid.y - 16 + slot.lane * 14;
     }
     const g = el("g", { class: "edge-g" }, vp);
     el("path", { d, class: "edge-hit", "data-id": id }, g);
@@ -507,7 +583,12 @@ function render() {
         p.y = oy + (pt.y - start.y) / state.view.k;
         g.setAttribute("transform", `translate(${p.x},${p.y})`);
       };
-      const up = () => { window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up); render(); };
+      const up = () => {
+        window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up);
+        state._userMoved = state._userMoved || {};
+        state._userMoved[i] = true;
+        render();
+      };
       window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up);
     });
   });
@@ -532,21 +613,26 @@ function applyView() {
 }
 function fitView() {
   const ids = Object.keys(state.pos);
-  if (!ids.length) return;
+  if (!ids.length || !state.graph) return;
   const hasGhost = (state.graph.edges || []).some((e) => {
     const a = edgeEndpoints(e);
     return a.from < 0 && a.to >= 0 && state.pos[a.to];
   });
-  const W = svg.clientWidth || 900, H = svg.clientHeight || 560;
+  // svg may report 0 size while its panel is hidden — fall back to the visible wrapper
+  const wrap = document.querySelector(".canvas-wrap");
+  const W = (svg.clientWidth || (wrap && wrap.clientWidth) || 900);
+  const H = (svg.clientHeight || 560);
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   ids.forEach((k) => {
     const p = state.pos[k];
-    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+    if (!p) return;
+    // include self-loop arcs above the card in the fitted bounds
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y - 130);
     x1 = Math.max(x1, p.x + NW); y1 = Math.max(y1, p.y + NH);
   });
   if (hasGhost) x0 -= 270;
   const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
-  const k = Math.min(1.15, Math.min((W - 80) / bw, (H - 80) / bh));
+  const k = Math.max(0.15, Math.min(1.15, Math.min((W - 80) / bw, (H - 80) / bh)));
   state.view.k = k;
   state.view.x = (W - bw * k) / 2 - x0 * k;
   state.view.y = (H - bh * k) / 2 - y0 * k;
@@ -557,6 +643,7 @@ function svgPoint(ev) {
   return { x: ev.clientX - r.left, y: ev.clientY - r.top };
 }
 $("#fitBtn").onclick = () => fitView();
+$("#layoutBtn").onclick = () => autoLayout();
 $("#resetZoomBtn").onclick = () => { state.view.k = 1; applyView(); };
 $("#nodeSearch").oninput = (e) => { state.nodeFilter = e.target.value.toLowerCase(); render(); };
 $("#edgeTypeFilter").onchange = () => render();
@@ -730,7 +817,7 @@ $("#importGraphFile").onchange = (e) => {
   rd.onload = () => {
     try {
       state.graph = JSON.parse(rd.result);
-      state.pos = {}; state.selected = null; state._fitOnce = false;
+      state.pos = {}; state.selected = null; state._fitOnce = false; state._userMoved = {};
       afterGraphLoaded();
     } catch { alert("Invalid graph.json"); }
   };
