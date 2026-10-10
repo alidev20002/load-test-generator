@@ -121,10 +121,9 @@
         </div>
         <div class="tabbody" id="tab-add">
           <form id="addEdgeForm" class="form">
-            <div class="frow"><label>mode * <small>link = response field · literal = manual value · csv = file value</small></label>
+            <div class="frow"><label>mode * <small>link = response field · csv = file value</small></label>
               <select id="ae_mode" class="input">
                 <option value="link">link response field (from → to)</option>
-                <option value="literal">manual literal value (→ to)</option>
                 <option value="csv">CSV value (→ to)</option>
               </select>
             </div>
@@ -147,9 +146,8 @@
                 <div><label>resp_xpath * <small>JSON path in producer response (e.g. $.data.token)</small></label><input id="ae_resp_xpath" class="input" placeholder="e.g. $.data.token" /></div>
               </div>
             </div>
-            <div class="frow2" id="ae_manual_fields">
-              <div><label>literal <small>(required for literal mode)</small></label><input id="ae_literal" class="input" placeholder="manual value" /></div>
-              <div><label>csv <small>file:vars (required for csv mode)</small></label><input id="ae_csv" class="input" placeholder="data/users.csv:username" /></div>
+            <div class="frow" id="ae_csv_field">
+              <label>csv * <small>file:vars (required for csv mode)</small></label><input id="ae_csv" class="input" placeholder="data/users.csv:username" />
             </div>
             <div class="frow2">
               <div><label>from_har_idx</label><input id="ae_from_har" class="input" type="number" value="0" /></div>

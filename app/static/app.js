@@ -460,29 +460,6 @@ function render() {
 
   const typeFilter = $("#edgeTypeFilter").value;
 
-  // manual origins (literal values) share one ghost chip with fan-out edges
-  const ghost = { list: [], byKey: {} };
-  (state.graph.edges || []).forEach((e, id) => {
-    if (typeFilter && e.type !== typeFilter) return;
-    if (state.hiddenTypes.has(e.type)) return;
-    const a = edgeEndpoints(e);
-    if (a.to < 0 || !state.pos[a.to] || !visibleNode(a.to)) return;
-    if (a.from < 0) {
-      const key = "manual";
-      if (!ghost.byKey[key]) { ghost.byKey[key] = { key, label: "manual values", edges: [] }; ghost.list.push(ghost.byKey[key]); }
-      ghost.byKey[key].edges.push({ e, id, to: a.to });
-    }
-  });
-  const minPX = Math.min(...Object.values(state.pos).map((p) => p.x));
-  const GX = minPX - 250, GW = 170, GH = 38;
-  ghost.list.forEach((gh, gi) => {
-    gh.x = GX; gh.y = 60 + gi * 64;
-    const gg = el("g", { transform: `translate(${GX},${gh.y})` }, vp);
-    el("rect", { width: GW, height: GH, rx: 19, fill: "none", stroke: "#a79fd1", "stroke-width": 1.4, "stroke-dasharray": "6 4" }, gg);
-    const gt = el("text", { x: GW / 2, y: GH / 2 + 4.5, "text-anchor": "middle", "font-size": 12, "font-weight": 700, fill: "#a79fd1" }, gg);
-    gt.textContent = "✎ " + gh.label;
-  });
-
   // edges under the node cards — parallel edges between the same pair get spread into lanes
   const _visList = [];
   (state.graph.edges || []).forEach((e, id) => {
@@ -490,8 +467,7 @@ function render() {
     if (state.hiddenTypes.has(e.type)) return;
     const { from, to } = edgeEndpoints(e);
     if (to < 0 || !state.pos[to] || !visibleNode(to)) return;
-    if (from >= 0 && (!state.pos[from] || !visibleNode(from))) return;
-    if (from < 0 && !ghost.byKey["manual"]) return;
+    if (from < 0 || !state.pos[from] || !visibleNode(from)) return;
     _visList.push({ e, id, from, to });
   });
   const slotOf = buildPairLanes(_visList);
@@ -499,8 +475,8 @@ function render() {
     const color = EDGE_COLORS[e.type] || "#888";
     const sel = state.selected?.kind === "edge" && state.selected.id === id;
     const slot = slotOf[id] || { lane: 0, count: 1, pos: 0 };
-    let d, p0, lx, ly, dashed = false;
-    if (from >= 0 && from === to) {
+    let d, p0, lx, ly;
+    if (from === to) {
       // self-loops: stack arcs above the node, one height per parallel edge
       const nx = state.pos[to].x, ny = state.pos[to].y;
       const h = 85 + slot.pos * 30;
@@ -511,15 +487,7 @@ function render() {
     } else {
       // stop before the target border so the arrowhead is never covered by the card
       const x2 = state.pos[to].x - 12, y2 = state.pos[to].y + NH / 2;
-      let x1, y1;
-      if (from < 0) {
-        const gh = ghost.byKey["manual"];
-        if (!gh) return;
-        // fan out manual edges along the ghost chip + target side
-        x1 = gh.x + GW; y1 = gh.y + GH / 2 + slot.lane * 10; dashed = true;
-      } else {
-        x1 = state.pos[from].x + NW + 4; y1 = state.pos[from].y + NH / 2;
-      }
+      const x1 = state.pos[from].x + NW + 4, y1 = state.pos[from].y + NH / 2;
       const c = edgeCurve(x1, y1, x2, y2, slot.lane, slot.count);
       d = c.d; p0 = c.p0; lx = c.mid.x; ly = c.mid.y - 16 + slot.lane * 14;
     }
@@ -530,7 +498,6 @@ function render() {
       d, class: "edge" + (sel ? " selected" : ""),
       stroke: color, "stroke-width": sel ? 3.4 : 2.2,
       "marker-end": `url(#arr-${e.type})`,
-      "stroke-dasharray": dashed ? "7 5" : "none",
     }, g);
     if (state.showLabels || sel) {
       const lbl = el("g", { transform: `translate(${lx},${ly})`, style: "pointer-events:none" }, g);
@@ -635,10 +602,6 @@ function applyView() {
 function fitView() {
   const ids = Object.keys(state.pos);
   if (!ids.length || !state.graph) return;
-  const hasGhost = (state.graph.edges || []).some((e) => {
-    const a = edgeEndpoints(e);
-    return a.from < 0 && a.to >= 0 && state.pos[a.to];
-  });
   // svg may report 0 size while its panel is hidden — fall back to the visible wrapper
   const wrap = document.querySelector(".canvas-wrap");
   const W = (svg.clientWidth || (wrap && wrap.clientWidth) || 900);
@@ -651,7 +614,6 @@ function fitView() {
     x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y - 130);
     x1 = Math.max(x1, p.x + NW); y1 = Math.max(y1, p.y + NH);
   });
-  if (hasGhost) x0 -= 270;
   const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
   const k = Math.max(0.15, Math.min(1.15, Math.min((W - 80) / bw, (H - 80) / bh)));
   state.view.k = k;
@@ -687,7 +649,7 @@ function showNodeTip(ev, n, i) {
 function showEdgeTip(ev, e, id, from, to) {
   const d = e.dependency || {};
   tip.innerHTML = `<div class="tt">🔗 edge ${id} · [${e.type}] ${edgeKey(e)}</div>
-    <b>producer → consumer:</b> ${from < 0 ? "MANUAL/CSV" : "node " + from} → node ${to}<br/>
+    <b>producer → consumer:</b> node ${from} → node ${to}<br/>
     <b>variable:</b> ${edgeVar(e)}<br/>
     <b>value:</b> ${(d.value || "").toString().slice(0, 90) || "—"}<br/>
     <b>xpath:</b> ${d.xpath || "—"} · <b>from_set_cookie:</b> ${d.from_set_cookie ?? "—"}<br/>
@@ -726,7 +688,7 @@ function renderDetail() {
       <span class="badge" style="background:${EDGE_COLORS[e.type] || "#fff"}">[${e.type}] ${edgeKey(e)}</span>
       <span><button class="btn ghost sm" onclick="openEdit(${s.id})">✏ edit</button>
       <button class="icon-btn" onclick="deleteEdge(${s.id})">🗑</button></span></div>
-      <div>edge ${s.id}: ${from < 0 ? "MANUAL" : "node " + from} → node ${to}</div>
+      <div>edge ${s.id}: node ${from} → node ${to}</div>
       <div>var <b>${edgeVar(e)}</b> · value ${(e.dependency?.value || "").toString().slice(0, 80)}</div>
       <div class="muted">xpath ${e.dependency?.xpath || "—"} · har ${e.from_index}→${e.to_index}</div></div>`;
   }
@@ -815,10 +777,9 @@ function syncAeHarIdx() {
 }
 function updateAeModeUI() {
   const mode = $("#ae_mode")?.value || "link";
-  const isLink = mode === "link", isLit = mode === "literal", isCsv = mode === "csv";
+  const isLink = mode === "link", isCsv = mode === "csv";
   if ($("#ae_link_fields")) $("#ae_link_fields").style.display = isLink ? "" : "none";
-  const lit = $("#ae_literal"), csv = $("#ae_csv");
-  if (lit) lit.closest("div").style.opacity = isLit ? "1" : ".45";
+  const csv = $("#ae_csv");
   if (csv) csv.closest("div").style.opacity = isCsv ? "1" : ".45";
   if ($("#ae_from")) $("#ae_from").disabled = !isLink;
   if ($("#ae_from_sel")) $("#ae_from_sel").disabled = !isLink;
@@ -826,7 +787,6 @@ function updateAeModeUI() {
   if (rh) rh.required = isLink;
   const rx = $("#ae_resp_xpath");
   if (rx) rx.required = isLink;
-  if (lit) lit.required = isLit;
   if (csv) csv.required = isCsv;
 }
 function updateAeHint() {
@@ -843,9 +803,7 @@ function updateAeHint() {
   const rx = $("#ae_resp_xpath")?.value.trim() || "—";
   box.textContent = mode === "link"
     ? `Will create: [${type}] ${key} · producer ${fl} → consumer ${tl} · extract ${rn} @ ${rx}`
-    : mode === "literal"
-      ? `Will create manual value → consumer ${tl} · [${type}] ${key}`
-      : `Will create CSV value → consumer ${tl} · [${type}] ${key}`;
+    : `Will create CSV value → consumer ${tl} · [${type}] ${key}`;
 }
 ["ae_mode", "ae_from", "ae_to", "ae_type", "ae_key", "ae_resp_name", "ae_resp_xpath"].forEach((id) => {
   document.getElementById(id)?.addEventListener("change", () => {
@@ -887,9 +845,6 @@ $("#addEdgeForm").onsubmit = async (ev) => {
     body.resp_name = val("ae_resp_name");
     body.resp_xpath = val("ae_resp_xpath");
     if (val("ae_resp_value")) body.resp_value = val("ae_resp_value");
-  } else if (mode === "literal") {
-    if (!val("ae_literal")) return setStatus($("#addEdgeStatus"), "literal is required in literal mode.", false);
-    body.literal = val("ae_literal");
   } else {
     if (!val("ae_csv")) return setStatus($("#addEdgeStatus"), "csv is required in csv mode (format file:vars).", false);
     body.csv = val("ae_csv");
