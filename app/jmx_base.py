@@ -4,7 +4,8 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, parse_qsl
 from .har_model import Entry
 
-EXCLUDED_HEADERS = {"host", "content-length", "connection", "accept-encoding", "transfer-encoding"}
+EXCLUDED_HEADERS = {"host", "content-length", "connection", "accept-encoding", "transfer-encoding",
+                    "cookie", "set-cookie"}
 SKIP_SUFFIXES = (".png", ".jpg", ".jpeg", ".ico", ".svg", ".gif", ".woff", ".woff2",
                  ".ttf", ".eot", ".css", ".js")
 

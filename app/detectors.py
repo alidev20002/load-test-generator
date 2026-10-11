@@ -59,7 +59,9 @@ def check_url(responses: list, req_idx: int, graph: DependencyGraph,
 def check_header(responses: list, req_idx: int, graph: DependencyGraph,
                  to: MyNode, first: int) -> None:
     for h in to.request.headers:
-        if h.name in BLACKLIST_HEADERS:
+        if h.name in BLACKLIST_HEADERS or (h.name or "").lower() in ("cookie", "set-cookie"):
+            # Cookie/Set-Cookie belong to the cookie detector; keeping them
+            # here would create duplicate header-type edges for the same value.
             continue
         for ri in range(first, req_idx):
             frm = graph.get_node_by_index(ri)
@@ -97,7 +99,33 @@ def check_query(responses: list, req_idx: int, graph: DependencyGraph,
 
 def check_cookie(responses: list, req_idx: int, graph: DependencyGraph,
                  to: MyNode, first: int) -> None:
-    for c in to.request.cookies:
+    # Combine cookies[] with Cookie header pairs so HARs that only carry the
+    # header (or graphs loaded from JSON built before har_model supplemented
+    # them) are still detected. Dedupe on (name, value).
+    combined = list(to.request.cookies)
+    seen = {(c.name, c.value) for c in combined}
+    for h in to.request.headers:
+        if (h.name or "").lower() != "cookie":
+            continue
+        for pair in (h.value or "").split(";"):
+            pair = pair.strip()
+            if not pair:
+                continue
+            if "=" in pair:
+                n, _, v = pair.partition("=")
+                n, v = n.strip(), v.strip()
+            else:
+                n, v = pair, ""
+            if not n or (n, v) in seen:
+                continue
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+                v = v[1:-1]
+            if (n, v) in seen:
+                continue
+            seen.add((n, v))
+            from .har_model import Cookie as _Cookie
+            combined.append(_Cookie(name=n, value=v))
+    for c in combined:
         for ri in range(first, req_idx):
             frm = graph.get_node_by_index(ri)
             if frm is None:

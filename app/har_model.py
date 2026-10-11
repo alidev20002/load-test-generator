@@ -71,12 +71,36 @@ class Request:
 
     @staticmethod
     def from_dict(d: dict) -> "Request":
+        headers = [Header.from_dict(h) for h in d.get("headers", []) or []]
+        cookies = [Cookie.from_dict(c) for c in d.get("cookies", []) or []]
+        # HAR exporters often put cookies only in the Cookie header and leave
+        # cookies[] empty. Supplement so cookie detection sees them.
+        seen = {(c.name, c.value) for c in cookies}
+        for h in headers:
+            if (h.name or "").lower() != "cookie":
+                continue
+            for pair in (h.value or "").split(";"):
+                pair = pair.strip()
+                if not pair:
+                    continue
+                if "=" in pair:
+                    n, _, v = pair.partition("=")
+                    n, v = n.strip(), v.strip()
+                else:
+                    n, v = pair, ""
+                if not n:
+                    continue
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+                    v = v[1:-1]
+                if (n, v) not in seen:
+                    seen.add((n, v))
+                    cookies.append(Cookie(name=n, value=v))
         return Request(
             method=str(d.get("method", "")),
             url=str(d.get("url", "")),
-            headers=[Header.from_dict(h) for h in d.get("headers", []) or []],
+            headers=headers,
             queryParams=[QueryParam.from_dict(q) for q in d.get("queryString", []) or []],
-            cookies=[Cookie.from_dict(c) for c in d.get("cookies", []) or []],
+            cookies=cookies,
             postData=PostData.from_dict(d.get("postData")),
         )
 

@@ -81,12 +81,25 @@ def get_unstructured_response(json_text: str) -> ResponseUnstructured:
 def analyze_response_headers(headers: list[Header], resp: ResponseUnstructured) -> None:
     """Port of analyzeResponseHeader: Set-Cookie -> AtomicObject(from_set_cookie=True)."""
     for h in headers:
-        if h.name == "Set-Cookie":
-            first = h.value.split(";")[0]
-            parts = first.split("=", 1)
-            if len(parts) == 2:
-                resp.objects.append(AtomicObject(value=parts[1], name=parts[0], xpath=None,
-                                                 from_set_cookie=True))
-            elif parts:
-                resp.objects.append(AtomicObject(value="", name=parts[0], xpath=None,
-                                                 from_set_cookie=True))
+        if (h.name or "").lower() != "set-cookie":
+            continue
+        first = (h.value or "").split(";")[0].strip()
+        if not first:
+            continue
+        parts = first.split("=", 1)
+        if len(parts) == 2:
+            name = parts[0].strip()
+            value = parts[1].strip()
+            # Strip surrounding quotes: Set-Cookie may quote the value.
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1]
+            if not name:
+                continue
+            resp.objects.append(AtomicObject(value=value, name=name, xpath=None,
+                                             from_set_cookie=True))
+        elif parts:
+            name = parts[0].strip()
+            if not name:
+                continue
+            resp.objects.append(AtomicObject(value="", name=name, xpath=None,
+                                             from_set_cookie=True))

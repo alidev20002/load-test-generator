@@ -144,6 +144,10 @@ def replace_headers(sampler: ET.Element, deps: list[Edge]) -> None:
             continue
         for h in ep.iter("elementProp"):
             hname = h.get("name", "")
+            # Cookies are managed by HTTP Cookie Manager (see replace_cookies),
+            # never as manual headers.
+            if (hname or "").lower() in ("cookie", "set-cookie"):
+                continue
             for e in deps:
                 if e.type != "header" or not e.dependency or hname != e.header_name:
                     continue
@@ -154,6 +158,58 @@ def replace_headers(sampler: ET.Element, deps: list[Edge]) -> None:
                 for sp in h:
                     if sp.tag == "stringProp" and sp.get("name") == "Header.value":
                         sp.text = val
+
+
+def _ensure_header_manager(sampler: ET.Element):
+    """Return (manager_prop, collection) creating them if missing."""
+    for ep in sampler:
+        if ep.tag == "elementProp" and ep.get("name") == "HTTPSampler.header_manager":
+            for coll in ep:
+                if coll.tag == "collectionProp":
+                    return ep, coll
+    mgr = ET.Element("elementProp", {"name": "HTTPSampler.header_manager",
+                                     "elementType": "HeaderManager"})
+    coll = ET.SubElement(mgr, "collectionProp", {"name": "HeaderManager.headers"})
+    sampler.append(mgr)
+    return mgr, coll
+
+
+def replace_cookies(sampler: ET.Element, deps: list[Edge]) -> None:
+    """Manual cookie overrides only.
+
+    Automatic cookie dependencies (Set-Cookie -> Cookie) need no JMX change:
+    the top-level HTTP Cookie Manager (added in jmx_load.apply_workload)
+    captures Set-Cookie responses and replays them. Writing recorded values
+    back as hardcoded headers would break replay, so base build excludes the
+    Cookie header entirely. Only literal/CSV cookie edges need an explicit
+    Cookie header here.
+    """
+    manual = [e for e in deps
+              if e.type == "cookie" and e.dependency is not None
+              and e.dependency.value in (MANUALLY_INSERTED, MANUALLY_CSV)]
+    if not manual:
+        return
+    pairs = []
+    for e in manual:
+        ref = _ref(e.dependency.name, e.from_index, e.dependency.value)
+        pairs.append(f"{e.name}={ref}")
+    cookie_value = "; ".join(pairs)
+    # Reuse an existing Cookie header if present (old base docs), else create.
+    for ep in sampler.iter("elementProp"):
+        if ep.get("name") != "HTTPSampler.header_manager":
+            continue
+        for h in ep.iter("elementProp"):
+            if (h.get("name", "") or "").lower() == "cookie":
+                for sp in h:
+                    if sp.tag == "stringProp" and sp.get("name") == "Header.value":
+                        sp.text = cookie_value
+                return
+    _, coll = _ensure_header_manager(sampler)
+    hp = ET.SubElement(coll, "elementProp", {"name": "Cookie", "elementType": "Header"})
+    c = ET.SubElement(hp, "stringProp", {"name": "Header.name"})
+    c.text = "Cookie"
+    c = ET.SubElement(hp, "stringProp", {"name": "Header.value"})
+    c.text = cookie_value
 
 
 def replace_args(sampler: ET.Element, deps: list[Edge]) -> None:
@@ -359,6 +415,7 @@ def correlate(tree: ET.ElementTree, graph: DependencyGraph, entries) -> ET.Eleme
         deps = graph.deps_by_node(node)
         replace_url(sampler, deps, node)
         replace_headers(sampler, deps)
+        replace_cookies(sampler, deps)
         replace_args(sampler, deps)
         replace_json_body(sampler, sht, deps, node)
         extracted = graph.deps_to_extract(node, har_idx)
