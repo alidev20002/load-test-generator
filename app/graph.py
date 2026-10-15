@@ -177,7 +177,7 @@ class DependencyGraph:
                     if key not in seen:
                         seen.add(key)
                         out.append(e.structured)
-                elif e.dependency is not None and not e.dependency.from_set_cookie:
+                elif e.dependency is not None:
                     key = ("a", e.dependency.name, e.dependency.value, e.dependency.xpath)
                     if key not in seen:
                         seen.add(key)

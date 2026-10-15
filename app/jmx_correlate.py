@@ -175,24 +175,33 @@ def _ensure_header_manager(sampler: ET.Element):
 
 
 def replace_cookies(sampler: ET.Element, deps: list[Edge]) -> None:
-    """Manual cookie overrides only.
+    """Inject correlated Cookie header.
 
-    Automatic cookie dependencies (Set-Cookie -> Cookie) need no JMX change:
-    the top-level HTTP Cookie Manager (added in jmx_load.apply_workload)
-    captures Set-Cookie responses and replays them. Writing recorded values
-    back as hardcoded headers would break replay, so base build excludes the
-    Cookie header entirely. Only literal/CSV cookie edges need an explicit
-    Cookie header here.
+    Every ``cookie``-type edge needs an explicit ``Cookie`` header on the
+    consumer sampler because the base JMX (jmx_base) strips recorded Cookie
+    headers entirely:
+
+    - automatic edges (Set-Cookie -> Cookie, or JSON field -> Cookie):
+      ``<name>=${<depName>_<from_idx>}``
+    - literal/CSV edges: ``<name>=<literal>``
+
+    The HTTP Cookie Manager kept at top level remains as a fallback for
+    plain session replay, but explicit correlation is what makes the
+    dependency graph actually effective in the JMX (and visible).
     """
-    manual = [e for e in deps
-              if e.type == "cookie" and e.dependency is not None
-              and e.dependency.value in (MANUALLY_INSERTED, MANUALLY_CSV)]
-    if not manual:
+    cookie_edges = [e for e in deps
+                    if e.type == "cookie" and e.dependency is not None]
+    if not cookie_edges:
         return
+    # Dedupe by cookie name — last (closest producer) wins.
+    by_name: dict[str, Edge] = {}
+    for e in cookie_edges:
+        by_name[e.name or (e.dependency.name if e.dependency else "")] = e
     pairs = []
-    for e in manual:
+    for cname, e in by_name.items():
+        assert e.dependency is not None
         ref = _ref(e.dependency.name, e.from_index, e.dependency.value)
-        pairs.append(f"{e.name}={ref}")
+        pairs.append(f"{cname}={ref}")
     cookie_value = "; ".join(pairs)
     # Reuse an existing Cookie header if present (old base docs), else create.
     for ep in sampler.iter("elementProp"):
@@ -342,7 +351,13 @@ def _add_groovy_preprocessor(sampler_ht: ET.Element | None, bodies: list[Edge],
 
 
 def add_json_extractor(sampler_ht: ET.Element, deps: list) -> None:
-    """Port of addRegExtractorMain: one JSONPostProcessor for all extracted vars."""
+    """Port of addRegExtractorMain: one JSONPostProcessor for all extracted vars.
+
+    Set-Cookie origin atomics (from_set_cookie=True, xpath=None) are skipped
+    here — they are extracted from response *headers* via
+    :func:`add_cookie_regex_extractors`, since a JSON extractor cannot read
+    headers.
+    """
     names, paths = [], []
     for o in deps:
         from .response_model import AtomicObject, StructuredObject
@@ -369,6 +384,40 @@ def add_json_extractor(sampler_ht: ET.Element, deps: list) -> None:
         c.text = t
     sampler_ht.append(ext)
     ET.SubElement(sampler_ht, "hashTree")
+
+
+def add_cookie_regex_extractors(sampler_ht: ET.Element, cookie_deps: list) -> None:
+    """One RegexExtractor per Set-Cookie variable (response headers).
+
+    ``cookie_deps`` are AtomicObjects with ``from_set_cookie=True`` already
+    tagged with ``_ref_name`` (``<name>_<producer_har_idx>``). The regex
+    captures the cookie value from e.g. ``Set-Cookie: sessionid=abc; Path=/``.
+    ``useHeaders=true`` scopes the match to response headers.
+    """
+    from .response_model import AtomicObject
+    seen = set()
+    for o in cookie_deps:
+        if not isinstance(o, AtomicObject) or not o.from_set_cookie:
+            continue
+        ref = getattr(o, "_ref_name", o.name)
+        if ref in seen:
+            continue
+        seen.add(ref)
+        ext = ET.Element("RegexExtractor",
+                         {"guiclass": "RegexExtractorGui", "testclass": "RegexExtractor",
+                          "testname": f"Regex Extractor - cookie {o.name}", "enabled": "true"})
+        # Matches `NAME=value` up to ';' or end-of-line (covers attributes or bare cookie).
+        regex = f"{o.name}=([^;\\r\\n]+)"
+        for n, t in (("RegexExtractor.useHeaders", "true"),
+                     ("RegexExtractor.refname", ref),
+                     ("RegexExtractor.regex", regex),
+                     ("RegexExtractor.template", "$1$"),
+                     ("RegexExtractor.default", NOT_FOUND),
+                     ("RegexExtractor.match_number", "1")):
+            c = ET.SubElement(ext, "stringProp", {"name": n})
+            c.text = t
+        sampler_ht.append(ext)
+        ET.SubElement(sampler_ht, "hashTree")
 
 
 def _csv_element(csv) -> ET.Element:
@@ -423,5 +472,10 @@ def correlate(tree: ET.ElementTree, graph: DependencyGraph, entries) -> ET.Eleme
         for o in extracted:
             o._ref_name = f"{o.name}_{har_idx}"  # type: ignore[attr-defined]
         if extracted and sht is not None:
+            from .response_model import AtomicObject as _AO
+            cookie_from_header = [o for o in extracted
+                                  if isinstance(o, _AO) and o.from_set_cookie]
             add_json_extractor(sht, extracted)
+            if cookie_from_header:
+                add_cookie_regex_extractors(sht, cookie_from_header)
     return tree

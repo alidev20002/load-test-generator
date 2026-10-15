@@ -80,7 +80,7 @@ def apply_workload(tree: ET.ElementTree, workloads: list[Workload],
         cm = ET.Element("CookieManager", {"guiclass": "CookiePanel",
                                           "testclass": "CookieManager",
                                           "testname": "HTTP Cookie Manager",
-                                          "enalbed": "true"})
+                                          "enabled": "true"})
         ET.SubElement(cm, "collectionProp", {"name": "CookieManager.cookies"})
         b1 = ET.SubElement(cm, "boolProp", {"name": "CookieManager.clearEachIteration"})
         b1.text = "true"
