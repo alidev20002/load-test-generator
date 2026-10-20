@@ -102,7 +102,7 @@ def consumer_endpoint(path: str, field: str, value: str | bool, location: str) -
     """Build the consumer endpoint according to the selected location."""
     value_text = str(value).lower() if isinstance(value, bool) else str(value)
     if location == "url":
-        return f"{path.rstrip('/')}/{quote(value_text, safe='')}"
+        return f"{path.rstrip('/')}/{quote(field, safe='')}/{quote(value_text, safe='')}"
     if location == "queryparam":
         separator = "&" if "?" in path else "?"
         return f"{path}{separator}{quote(field, safe='')}={quote(value_text, safe='')}"
