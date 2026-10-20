@@ -4,140 +4,120 @@
     "spotify": {
       "positive_pairs": [
         {
-          "id": "albums_albums_tracks_id_albumId",
           "pattern": "Generic 'id' of a resource is consumed by its child endpoint under a semantic, entity-prefixed name (album_id)",
           "producer": { "endpoint": "/albums", "field": "id" },
           "consumer": { "endpoint": "/albums/tracks", "field": "album_id" },
           "value_generator": "id"
         },
         {
-          "id": "artists_artists_albums_artistId_artist_id",
           "pattern": "Case-convention change: camelCase producer field to snake_case consumer field",
           "producer": { "endpoint": "/artists", "field": "artistId" },
           "consumer": { "endpoint": "/artists/albums", "field": "artist_id" },
           "value_generator": "id"
         },
         {
-          "id": "playlists_tracks_playlists_images_PlaylistId_playlist_id",
           "pattern": "PascalCase producer field to snake_case consumer field",
           "producer": { "endpoint": "/playlists/tracks", "field": "PlaylistId" },
           "consumer": { "endpoint": "/playlists/images", "field": "playlist_id" },
           "value_generator": "id"
         },
         {
-          "id": "me_playlists_playlists_followers_id_playlist-id",
           "pattern": "Generic 'id' from a creation response to a kebab-case, entity-specific consumer field",
           "producer": { "endpoint": "/me/playlists", "field": "id" },
           "consumer": { "endpoint": "/playlists/followers", "field": "playlist-id" },
           "value_generator": "id"
         },
         {
-          "id": "users_users_playlists_user_id_uid",
           "pattern": "Abbreviation: user_id shortened to uid",
           "producer": { "endpoint": "/users", "field": "user_id" },
           "consumer": { "endpoint": "/users/playlists", "field": "uid" },
           "value_generator": "id"
         },
         {
-          "id": "playlists_users_owner_id_userId",
           "pattern": "Semantic role mapping: playlist owner id is a user id, with snake_case to camelCase change",
           "producer": { "endpoint": "/playlists", "field": "owner_id" },
           "consumer": { "endpoint": "/users", "field": "userId" },
           "value_generator": "id"
         },
         {
-          "id": "browse_categories_browse_categories_playlists_category_id_catId",
           "pattern": "Abbreviation: category shortened to cat, combined with camelCase",
           "producer": { "endpoint": "/browse/categories", "field": "category_id" },
           "consumer": { "endpoint": "/browse/categories/playlists", "field": "catId" },
           "value_generator": "id"
         },
         {
-          "id": "tracks_audio-analysis_id_track_id",
           "pattern": "Generic 'id' to contextual name: a track id used for audio analysis lookup",
           "producer": { "endpoint": "/tracks", "field": "id" },
           "consumer": { "endpoint": "/audio-analysis", "field": "track_id" },
           "value_generator": "id"
         },
         {
-          "id": "tracks_audio-features_ids_trackIds",
           "pattern": "Plural list field 'ids' to entity-prefixed camelCase plural 'trackIds'",
           "producer": { "endpoint": "/tracks", "field": "ids" },
           "consumer": { "endpoint": "/audio-features", "field": "trackIds" },
           "value_generator": "id"
         },
         {
-          "id": "me_player_devices_me_player_play_device_id_deviceId",
           "pattern": "snake_case to camelCase for the same concept",
           "producer": { "endpoint": "/me/player/devices", "field": "device_id" },
           "consumer": { "endpoint": "/me/player/play", "field": "deviceId" },
           "value_generator": "id"
         },
         {
-          "id": "me_player_devices_me_player_volume_id_dev_id",
           "pattern": "Generic 'id' to abbreviated, prefixed 'dev_id'",
           "producer": { "endpoint": "/me/player/devices", "field": "id" },
           "consumer": { "endpoint": "/me/player/volume", "field": "dev_id" },
           "value_generator": "id"
         },
         {
-          "id": "shows_shows_episodes_show_id_showId",
           "pattern": "snake_case to camelCase for parent identifier passed to child listing",
           "producer": { "endpoint": "/shows", "field": "show_id" },
           "consumer": { "endpoint": "/shows/episodes", "field": "showId" },
           "value_generator": "id"
         },
         {
-          "id": "episodes_me_episodes_episode_id_episodeIds",
           "pattern": "Singular to plural list combined with case change",
           "producer": { "endpoint": "/episodes", "field": "episode_id" },
           "consumer": { "endpoint": "/me/episodes", "field": "episodeIds" },
           "value_generator": "id"
         },
         {
-          "id": "audiobooks_audiobooks_chapters_audiobook_id_book_id",
           "pattern": "Partial-word abbreviation: audiobook shortened to book",
           "producer": { "endpoint": "/audiobooks", "field": "audiobook_id" },
           "consumer": { "endpoint": "/audiobooks/chapters", "field": "book_id" },
           "value_generator": "id"
         },
         {
-          "id": "chapters_me_audiobooks_contains_chapter_id_chapter_ids",
           "pattern": "Singular id to plural list parameter (same snake_case stem)",
           "producer": { "endpoint": "/chapters", "field": "chapter_id" },
           "consumer": { "endpoint": "/me/audiobooks/contains", "field": "chapter_ids" },
           "value_generator": "id"
         },
         {
-          "id": "me_albums_me_albums_contains_album_ids_albumIds",
           "pattern": "Plural list in snake_case to plural list in camelCase",
           "producer": { "endpoint": "/me/albums", "field": "album_ids" },
           "consumer": { "endpoint": "/me/albums/contains", "field": "albumIds" },
           "value_generator": "id"
         },
         {
-          "id": "me_me_following_access_token_accessToken",
           "pattern": "OAuth/JWT bearer token reused with snake_case to camelCase change",
           "producer": { "endpoint": "/me", "field": "access_token" },
           "consumer": { "endpoint": "/me/following", "field": "accessToken" },
           "value_generator": "jwt"
         },
         {
-          "id": "playlists_tracks_playlists_items_snapshot_id_snapshotId",
           "pattern": "Version/concurrency token returned by one write endpoint and consumed by a sibling endpoint, with a case change",
           "producer": { "endpoint": "/playlists/tracks", "field": "snapshot_id" },
           "consumer": { "endpoint": "/playlists/items", "field": "snapshotId" },
           "value_generator": "token"
         },
         {
-          "id": "recommendations_tracks_seed_tracks_ids",
           "pattern": "Semantic role: seed_tracks holds track ids that are consumed as the generic list 'ids'",
           "producer": { "endpoint": "/recommendations", "field": "seed_tracks" },
           "consumer": { "endpoint": "/tracks", "field": "ids" },
           "value_generator": "id"
         },
         {
-          "id": "me_player_queue_me_player_play_track_uri_uris",
           "pattern": "Singular to plural, with a specific name generalised: track_uri reused in uris list",
           "producer": { "endpoint": "/me/player/queue", "field": "track_uri" },
           "consumer": { "endpoint": "/me/player/play", "field": "uris" },
@@ -146,147 +126,126 @@
       ],
       "negative_pairs": [
         {
-          "id": "tracks_me_player_play_id_device_id",
           "pattern": "Both are ids, but a track identifier cannot be a device identifier (different entity domains)",
           "producer": { "endpoint": "/tracks", "field": "id" },
           "consumer": { "endpoint": "/me/player/play", "field": "device_id" },
           "value_generator": "id"
         },
         {
-          "id": "users_playlists_user_id_playlist_id",
           "pattern": "Identical snake_case '_id' structure but different entities (user vs playlist)",
           "producer": { "endpoint": "/users", "field": "user_id" },
           "consumer": { "endpoint": "/playlists/tracks", "field": "playlist_id" },
           "value_generator": "id"
         },
         {
-          "id": "shows_artists_id_id",
           "pattern": "Identical field name 'id' on both sides, but a show id is not an artist id",
           "producer": { "endpoint": "/shows", "field": "id" },
           "consumer": { "endpoint": "/artists", "field": "id" },
           "value_generator": "id"
         },
         {
-          "id": "episodes_audiobooks_chapters_episodeId_chapterId",
           "pattern": "Semantically close media items (episode vs chapter) with the same camelCase pattern, but the ids are not interchangeable",
           "producer": { "endpoint": "/episodes", "field": "episodeId" },
           "consumer": { "endpoint": "/audiobooks/chapters", "field": "chapterId" },
           "value_generator": "id"
         },
         {
-          "id": "playlists_tracks_albums_snapshot_id_album_id",
           "pattern": "Both end in '_id' but a snapshot version token is not an album identifier",
           "producer": { "endpoint": "/playlists/tracks", "field": "snapshot_id" },
           "consumer": { "endpoint": "/albums/tracks", "field": "album_id" },
           "value_generator": "token"
         },
         {
-          "id": "me_player_volume_me_top_volume_percent_limit",
           "pattern": "Both small integers in overlapping ranges (0-50/100), but volume and result limit are unrelated",
           "producer": { "endpoint": "/me/player/volume", "field": "volume_percent" },
           "consumer": { "endpoint": "/me/top", "field": "limit" },
           "value_generator": "int"
         },
         {
-          "id": "me_player_seek_tracks_position_ms_market",
           "pattern": "Numeric millisecond value cannot be an ISO country code",
           "producer": { "endpoint": "/me/player/seek", "field": "position_ms" },
           "consumer": { "endpoint": "/tracks", "field": "market" },
           "value_generator": "int"
         },
         {
-          "id": "artists_browse_categories_popularity_offset",
           "pattern": "Both are integers with plausible overlapping ranges, but popularity score is not a pagination offset",
           "producer": { "endpoint": "/artists", "field": "popularity" },
           "consumer": { "endpoint": "/browse/categories", "field": "offset" },
           "value_generator": "int"
         },
         {
-          "id": "me_playlists_me_access_token_snapshot_id",
           "pattern": "Both are opaque token-like strings, but an OAuth access token is not a playlist snapshot id",
           "producer": { "endpoint": "/me", "field": "access_token" },
           "consumer": { "endpoint": "/playlists/items", "field": "snapshot_id" },
           "value_generator": "jwt"
         },
         {
-          "id": "me_search_display_name_q",
           "pattern": "Both are free-text strings, but a user's display name is not meant as a catalog search query",
           "producer": { "endpoint": "/me", "field": "display_name" },
           "consumer": { "endpoint": "/search", "field": "q" },
           "value_generator": "string"
         },
         {
-          "id": "tracks_me_player_seek_duration_ms_limit",
           "pattern": "Millisecond integer vs a count-like limit; numeric type matches, semantics do not",
           "producer": { "endpoint": "/tracks", "field": "duration_ms" },
           "consumer": { "endpoint": "/me/tracks", "field": "limit" },
           "value_generator": "int"
         },
         {
-          "id": "albums_tracks_recommendations_track_number_limit",
           "pattern": "Both small integers, but track number within an album is unrelated to recommendation limit",
           "producer": { "endpoint": "/albums/tracks", "field": "track_number" },
           "consumer": { "endpoint": "/recommendations", "field": "limit" },
           "value_generator": "int"
         },
         {
-          "id": "recommendations_available-genre-seeds_me_top_genres_type",
           "pattern": "Semantically adjacent classification words ('genres' vs 'type'), but a genre seed is not a valid top 'type' (artists/tracks)",
           "producer": { "endpoint": "/recommendations/available-genre-seeds", "field": "genres" },
           "consumer": { "endpoint": "/me/top", "field": "type" },
           "value_generator": "string"
         },
         {
-          "id": "markets_search_markets_type",
           "pattern": "Both short string enums/codes, but a market code is not a search type",
           "producer": { "endpoint": "/markets", "field": "markets" },
           "consumer": { "endpoint": "/search", "field": "type" },
           "value_generator": "string"
         },
         {
-          "id": "me_player_shuffle_me_player_repeat_state_state",
           "pattern": "Identical field name 'state' but boolean shuffle state is incompatible with repeat enum (track/context/off)",
           "producer": { "endpoint": "/me/player/shuffle", "field": "state" },
           "consumer": { "endpoint": "/me/player/repeat", "field": "state" },
           "value_generator": "string"
         },
         {
-          "id": "albums_me_albums_release_date_added_at",
           "pattern": "Both are date/time values, but release date is not the moment the user saved the album",
           "producer": { "endpoint": "/albums", "field": "release_date" },
           "consumer": { "endpoint": "/me/albums", "field": "added_at" },
           "value_generator": "string"
         },
         {
-          "id": "playlists_images_me_player_play_url_context_uri",
           "pattern": "Both are URL/URI-like strings, but an image URL is not a playback context URI",
           "producer": { "endpoint": "/playlists/images", "field": "url" },
           "consumer": { "endpoint": "/me/player/play", "field": "context_uri" },
           "value_generator": "string"
         },
         {
-          "id": "audio-features_me_player_volume_tempo_volume_percent",
           "pattern": "Numeric audio-related fields (tempo in BPM vs volume level) with unrelated semantics",
           "producer": { "endpoint": "/audio-features", "field": "tempo" },
           "consumer": { "endpoint": "/me/player/volume", "field": "volume_percent" },
           "value_generator": "int"
         },
         {
-          "id": "me_following_me_tracks_after_offset",
           "pattern": "Both pagination-related, but a cursor 'after' (artist id) is not a numeric offset",
           "producer": { "endpoint": "/me/following", "field": "after" },
           "consumer": { "endpoint": "/me/tracks", "field": "offset" },
           "value_generator": "id"
         },
         {
-          "id": "browse_categories_me_player_devices_category_id_device_id",
           "pattern": "Same '_id' suffix and string type, but category and device are far-apart domains",
           "producer": { "endpoint": "/browse/categories", "field": "category_id" },
           "consumer": { "endpoint": "/me/player/volume", "field": "device_id" },
           "value_generator": "id"
         },
         {
-          "id": "playlists_followers_users_followers_total_user_id",
           "pattern": "Both relate to users/followers semantically, but a follower count is not a user identifier",
           "producer": { "endpoint": "/playlists/followers", "field": "total" },
           "consumer": { "endpoint": "/users", "field": "user_id" },

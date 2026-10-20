@@ -130,9 +130,9 @@ def build_case(
     consumer["endpoint"] = f"{normalized_base_url}/{consumer_path.lstrip('/')}"
 
     pair_name = pair.get("name", pair.get("pattern", "case"))
-    pair_id = pair.get("id", pair_name)
+    pair_pattern = pair.get("pattern", "Undefined Pattern")
     return {
-        "id": f"GEN_{case_number:05d}_{safe_id_part(project_name)}_{safe_id_part(pair_id)}_{location}",
+        "id": f"GEN_{case_number:05d}_{safe_id_part(project_name)}_{safe_id_part(pair_pattern)}_{location}",
         "pattern": pair["pattern"],
         "producer": producer,
         "consumer": consumer,
