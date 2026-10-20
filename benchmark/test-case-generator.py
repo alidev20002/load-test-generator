@@ -36,20 +36,21 @@ def random_jwt_like(rng: random.Random) -> str:
     return ".".join(random_token(rng, n) for n in (12, 20, 16))
 
 
-def random_value(kind: str, rng: random.Random, config: dict[str, Any] | None = None) -> str:
-    config = config or {}
+def random_value(kind: str, rng: random.Random) -> str | bool:
     if kind == "token":
-        return random_token(rng, int(config.get("length", 24)))
+        return random_token(rng)
     if kind == "jwt":
         return random_jwt_like(rng)
     if kind == "uuid":
         return str(uuid.UUID(int=rng.getrandbits(128), version=4))
     if kind == "int":
-        return str(rng.randint(int(config.get("min", 1)), int(config.get("max", 9999))))
+        return str(rng.randint(1, 9999))
     if kind == "id":
-        return f"{rng.randint(int(config.get('min', 1000)), int(config.get('max', 9999)))}"
+        return str(rng.randint(1000, 9999))
     if kind == "string":
-        return str(config.get("value", "sample-value"))
+        return random_token(rng, 12)
+    if kind == "bool":
+        return rng.choice((True, False))
     raise ValueError(f"Unknown value generator: {kind!r}")
 
 
@@ -97,13 +98,14 @@ def validate_catalog(catalog: dict[str, Any]) -> None:
                     raise ValueError(f"{prefix}.consumer must not define 'location'; locations are expanded automatically.")
 
 
-def consumer_endpoint(path: str, field: str, value: str, location: str) -> str:
+def consumer_endpoint(path: str, field: str, value: str | bool, location: str) -> str:
     """Build the consumer endpoint according to the selected location."""
+    value_text = str(value).lower() if isinstance(value, bool) else str(value)
     if location == "url":
-        return f"{path.rstrip('/')}/{quote(value, safe='')}"
+        return f"{path.rstrip('/')}/{quote(value_text, safe='')}"
     if location == "queryparam":
         separator = "&" if "?" in path else "?"
-        return f"{path}{separator}{quote(field, safe='')}={quote(value, safe='')}"
+        return f"{path}{separator}{quote(field, safe='')}={quote(value_text, safe='')}"
     return path
 
 
@@ -116,7 +118,7 @@ def build_case(
     case_number: int,
     location: str,
 ) -> dict[str, Any]:
-    value = random_value(pair["value_generator"], rng, pair.get("value_config"))
+    value = random_value(pair["value_generator"], rng)
     producer = dict(pair["producer"])
     consumer = dict(pair["consumer"])
     producer["value"] = value
