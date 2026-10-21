@@ -2,7 +2,7 @@
   "description": "Project-specific candidate pairs for producer-consumer benchmark generation. Replace/extend these illustrative entries with pairs verified against the exact OpenAPI version used in your study.",
   "projects": {
     "spotify": {
-      "positive_dependencies": [
+      "positive_pairs": [
         {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/albums", "field": "id"}, "consumer": {"endpoint": "/albums/tracks", "field": "album_id"}, "value_generator": "id"},
         {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/artists", "field": "artistId"}, "consumer": {"endpoint": "/artists/albums", "field": "artist_id"}, "value_generator": "id"},
         {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/playlists/tracks", "field": "PlaylistId"}, "consumer": {"endpoint": "/playlists/images", "field": "playlist_id"}, "value_generator": "id"},
@@ -24,7 +24,7 @@
         {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/recommendations", "field": "seed_tracks"}, "consumer": {"endpoint": "/tracks", "field": "ids"}, "value_generator": "id"},
         {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/me/player/queue", "field": "track_uri"}, "consumer": {"endpoint": "/me/player/play", "field": "uris"}, "value_generator": "string"}
       ],
-      "negative_dependencies": [
+      "negative_pairs": [
         {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/tracks", "field": "id"}, "consumer": {"endpoint": "/me/player/play", "field": "device_id"}, "value_generator": "id"},
         {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/users", "field": "user_id"}, "consumer": {"endpoint": "/playlists/tracks", "field": "playlist_id"}, "value_generator": "id"},
         {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/shows", "field": "id"}, "consumer": {"endpoint": "/artists", "field": "id"}, "value_generator": "id"},
