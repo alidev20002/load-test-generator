@@ -2,257 +2,101 @@
   "description": "Project-specific candidate pairs for producer-consumer benchmark generation. Replace/extend these illustrative entries with pairs verified against the exact OpenAPI version used in your study.",
   "projects": {
     "spotify": {
+      "positive_dependencies": [
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/albums", "field": "id"}, "consumer": {"endpoint": "/albums/tracks", "field": "album_id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/artists", "field": "artistId"}, "consumer": {"endpoint": "/artists/albums", "field": "artist_id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/playlists/tracks", "field": "PlaylistId"}, "consumer": {"endpoint": "/playlists/images", "field": "playlist_id"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/me/playlists", "field": "id"}, "consumer": {"endpoint": "/playlists/followers", "field": "playlist-id"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/users", "field": "user_id"}, "consumer": {"endpoint": "/users/playlists", "field": "uid"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/playlists", "field": "owner_id"}, "consumer": {"endpoint": "/users", "field": "userId"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/browse/categories", "field": "category_id"}, "consumer": {"endpoint": "/browse/categories/playlists", "field": "catId"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/tracks", "field": "id"}, "consumer": {"endpoint": "/audio-analysis", "field": "track_id"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/tracks", "field": "ids"}, "consumer": {"endpoint": "/audio-features", "field": "trackIds"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/me/player/devices", "field": "device_id"}, "consumer": {"endpoint": "/me/player/play", "field": "deviceId"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/me/player/devices", "field": "id"}, "consumer": {"endpoint": "/me/player/volume", "field": "dev_id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/shows", "field": "show_id"}, "consumer": {"endpoint": "/shows/episodes", "field": "showId"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/episodes", "field": "episode_id"}, "consumer": {"endpoint": "/me/episodes", "field": "episodeIds"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/audiobooks", "field": "audiobook_id"}, "consumer": {"endpoint": "/audiobooks/chapters", "field": "book_id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/chapters", "field": "chapter_id"}, "consumer": {"endpoint": "/me/audiobooks/contains", "field": "chapter_ids"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/me/albums", "field": "album_ids"}, "consumer": {"endpoint": "/me/albums/contains", "field": "albumIds"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/me", "field": "access_token"}, "consumer": {"endpoint": "/me/following", "field": "accessToken"}, "value_generator": "jwt"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/playlists/tracks", "field": "snapshot_id"}, "consumer": {"endpoint": "/playlists/items", "field": "snapshotId"}, "value_generator": "token"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/recommendations", "field": "seed_tracks"}, "consumer": {"endpoint": "/tracks", "field": "ids"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/me/player/queue", "field": "track_uri"}, "consumer": {"endpoint": "/me/player/play", "field": "uris"}, "value_generator": "string"}
+      ],
+      "negative_dependencies": [
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/tracks", "field": "id"}, "consumer": {"endpoint": "/me/player/play", "field": "device_id"}, "value_generator": "id"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/users", "field": "user_id"}, "consumer": {"endpoint": "/playlists/tracks", "field": "playlist_id"}, "value_generator": "id"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/shows", "field": "id"}, "consumer": {"endpoint": "/artists", "field": "id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/episodes", "field": "episodeId"}, "consumer": {"endpoint": "/audiobooks/chapters", "field": "chapterId"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/playlists/tracks", "field": "snapshot_id"}, "consumer": {"endpoint": "/albums/tracks", "field": "album_id"}, "value_generator": "token"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/me/player/volume", "field": "volume_percent"}, "consumer": {"endpoint": "/me/top", "field": "limit"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/me/player/seek", "field": "position_ms"}, "consumer": {"endpoint": "/tracks", "field": "market"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/artists", "field": "popularity"}, "consumer": {"endpoint": "/browse/categories", "field": "offset"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/me", "field": "access_token"}, "consumer": {"endpoint": "/playlists/items", "field": "snapshot_id"}, "value_generator": "jwt"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/me", "field": "display_name"}, "consumer": {"endpoint": "/search", "field": "q"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/tracks", "field": "duration_ms"}, "consumer": {"endpoint": "/me/tracks", "field": "limit"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/albums/tracks", "field": "track_number"}, "consumer": {"endpoint": "/recommendations", "field": "limit"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/recommendations/available-genre-seeds", "field": "genres"}, "consumer": {"endpoint": "/me/top", "field": "type"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/markets", "field": "markets"}, "consumer": {"endpoint": "/search", "field": "type"}, "value_generator": "string"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/me/player/shuffle", "field": "state"}, "consumer": {"endpoint": "/me/player/repeat", "field": "state"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/albums", "field": "release_date"}, "consumer": {"endpoint": "/me/albums", "field": "added_at"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/playlists/images", "field": "url"}, "consumer": {"endpoint": "/me/player/play", "field": "context_uri"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/audio-features", "field": "tempo"}, "consumer": {"endpoint": "/me/player/volume", "field": "volume_percent"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/me/following", "field": "after"}, "consumer": {"endpoint": "/me/tracks", "field": "offset"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/browse/categories", "field": "category_id"}, "consumer": {"endpoint": "/me/player/volume", "field": "device_id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/playlists/followers", "field": "total"}, "consumer": {"endpoint": "/users", "field": "user_id"}, "value_generator": "int"}
+      ],
+      "base_url": "https://api.spotify.com/v1"
+    },
+    "google-drive": {
       "positive_pairs": [
-        {
-          "pattern": "Generic 'id' of a resource is consumed by its child endpoint under a semantic, entity-prefixed name (album_id)",
-          "producer": { "endpoint": "/albums", "field": "id" },
-          "consumer": { "endpoint": "/albums/tracks", "field": "album_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Case-convention change: camelCase producer field to snake_case consumer field",
-          "producer": { "endpoint": "/artists", "field": "artistId" },
-          "consumer": { "endpoint": "/artists/albums", "field": "artist_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "PascalCase producer field to snake_case consumer field",
-          "producer": { "endpoint": "/playlists/tracks", "field": "PlaylistId" },
-          "consumer": { "endpoint": "/playlists/images", "field": "playlist_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Generic 'id' from a creation response to a kebab-case, entity-specific consumer field",
-          "producer": { "endpoint": "/me/playlists", "field": "id" },
-          "consumer": { "endpoint": "/playlists/followers", "field": "playlist-id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Abbreviation: user_id shortened to uid",
-          "producer": { "endpoint": "/users", "field": "user_id" },
-          "consumer": { "endpoint": "/users/playlists", "field": "uid" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Semantic role mapping: playlist owner id is a user id, with snake_case to camelCase change",
-          "producer": { "endpoint": "/playlists", "field": "owner_id" },
-          "consumer": { "endpoint": "/users", "field": "userId" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Abbreviation: category shortened to cat, combined with camelCase",
-          "producer": { "endpoint": "/browse/categories", "field": "category_id" },
-          "consumer": { "endpoint": "/browse/categories/playlists", "field": "catId" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Generic 'id' to contextual name: a track id used for audio analysis lookup",
-          "producer": { "endpoint": "/tracks", "field": "id" },
-          "consumer": { "endpoint": "/audio-analysis", "field": "track_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Plural list field 'ids' to entity-prefixed camelCase plural 'trackIds'",
-          "producer": { "endpoint": "/tracks", "field": "ids" },
-          "consumer": { "endpoint": "/audio-features", "field": "trackIds" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "snake_case to camelCase for the same concept",
-          "producer": { "endpoint": "/me/player/devices", "field": "device_id" },
-          "consumer": { "endpoint": "/me/player/play", "field": "deviceId" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Generic 'id' to abbreviated, prefixed 'dev_id'",
-          "producer": { "endpoint": "/me/player/devices", "field": "id" },
-          "consumer": { "endpoint": "/me/player/volume", "field": "dev_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "snake_case to camelCase for parent identifier passed to child listing",
-          "producer": { "endpoint": "/shows", "field": "show_id" },
-          "consumer": { "endpoint": "/shows/episodes", "field": "showId" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Singular to plural list combined with case change",
-          "producer": { "endpoint": "/episodes", "field": "episode_id" },
-          "consumer": { "endpoint": "/me/episodes", "field": "episodeIds" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Partial-word abbreviation: audiobook shortened to book",
-          "producer": { "endpoint": "/audiobooks", "field": "audiobook_id" },
-          "consumer": { "endpoint": "/audiobooks/chapters", "field": "book_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Singular id to plural list parameter (same snake_case stem)",
-          "producer": { "endpoint": "/chapters", "field": "chapter_id" },
-          "consumer": { "endpoint": "/me/audiobooks/contains", "field": "chapter_ids" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Plural list in snake_case to plural list in camelCase",
-          "producer": { "endpoint": "/me/albums", "field": "album_ids" },
-          "consumer": { "endpoint": "/me/albums/contains", "field": "albumIds" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "OAuth/JWT bearer token reused with snake_case to camelCase change",
-          "producer": { "endpoint": "/me", "field": "access_token" },
-          "consumer": { "endpoint": "/me/following", "field": "accessToken" },
-          "value_generator": "jwt"
-        },
-        {
-          "pattern": "Version/concurrency token returned by one write endpoint and consumed by a sibling endpoint, with a case change",
-          "producer": { "endpoint": "/playlists/tracks", "field": "snapshot_id" },
-          "consumer": { "endpoint": "/playlists/items", "field": "snapshotId" },
-          "value_generator": "token"
-        },
-        {
-          "pattern": "Semantic role: seed_tracks holds track ids that are consumed as the generic list 'ids'",
-          "producer": { "endpoint": "/recommendations", "field": "seed_tracks" },
-          "consumer": { "endpoint": "/tracks", "field": "ids" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Singular to plural, with a specific name generalised: track_uri reused in uris list",
-          "producer": { "endpoint": "/me/player/queue", "field": "track_uri" },
-          "consumer": { "endpoint": "/me/player/play", "field": "uris" },
-          "value_generator": "string"
-        }
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/files", "field": "fileId"}, "consumer": {"endpoint": "/files/copy", "field": "fileId"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/files/permissions", "field": "permissionId"}, "consumer": {"endpoint": "/files/permissions/update", "field": "permissionId"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/folders", "field": "folder_id"}, "consumer": {"endpoint": "/files", "field": "parent_folder_id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/files", "field": "nextPageToken"}, "consumer": {"endpoint": "/files", "field": "pageToken"}, "value_generator": "token"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/auth/login", "field": "access_token"}, "consumer": {"endpoint": "/files", "field": "access_token"}, "value_generator": "token"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/auth/login", "field": "jwt"}, "consumer": {"endpoint": "/files/export", "field": "jwt"}, "value_generator": "jwt"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/files/permissions", "field": "emailAddress"}, "consumer": {"endpoint": "/shares", "field": "emailAddress"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/files/copy", "field": "copiedFileId"}, "consumer": {"endpoint": "/files/trash", "field": "copiedFileId"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/users", "field": "user-id"}, "consumer": {"endpoint": "/files/permissions", "field": "user-id"}, "value_generator": "id"},
+        {"pattern": "semantic_lexical_match", "producer": {"endpoint": "/files", "field": "page_size"}, "consumer": {"endpoint": "/files/search", "field": "pageSize"}, "value_generator": "int"},
+
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files", "field": "id"}, "consumer": {"endpoint": "/files/permissions", "field": "documentRef"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files", "field": "parents"}, "consumer": {"endpoint": "/folders", "field": "directoryId"}, "value_generator": "id"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files", "field": "nextPageToken"}, "consumer": {"endpoint": "/files/search", "field": "cursor"}, "value_generator": "token"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/auth/login", "field": "accessToken"}, "consumer": {"endpoint": "/files", "field": "bearerCredential"}, "value_generator": "jwt"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files/permissions", "field": "emailAddress"}, "consumer": {"endpoint": "/shares", "field": "recipientMail"}, "value_generator": "string"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files", "field": "size"}, "consumer": {"endpoint": "/files/quota", "field": "byteCount"}, "value_generator": "int"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files", "field": "trashed"}, "consumer": {"endpoint": "/files/restore", "field": "isDeleted"}, "value_generator": "bool"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files", "field": "createdTime"}, "consumer": {"endpoint": "/reports/activity", "field": "startTimestamp"}, "value_generator": "string"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/files/permissions", "field": "role"}, "consumer": {"endpoint": "/shares", "field": "accessLevel"}, "value_generator": "string"},
+        {"pattern": "semantic_match_lexical_mismatch", "producer": {"endpoint": "/sessions", "field": "session_uuid"}, "consumer": {"endpoint": "/files/upload", "field": "uploadRef"}, "value_generator": "uuid"}
       ],
       "negative_pairs": [
-        {
-          "pattern": "Both are ids, but a track identifier cannot be a device identifier (different entity domains)",
-          "producer": { "endpoint": "/tracks", "field": "id" },
-          "consumer": { "endpoint": "/me/player/play", "field": "device_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Identical snake_case '_id' structure but different entities (user vs playlist)",
-          "producer": { "endpoint": "/users", "field": "user_id" },
-          "consumer": { "endpoint": "/playlists/tracks", "field": "playlist_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Identical field name 'id' on both sides, but a show id is not an artist id",
-          "producer": { "endpoint": "/shows", "field": "id" },
-          "consumer": { "endpoint": "/artists", "field": "id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Semantically close media items (episode vs chapter) with the same camelCase pattern, but the ids are not interchangeable",
-          "producer": { "endpoint": "/episodes", "field": "episodeId" },
-          "consumer": { "endpoint": "/audiobooks/chapters", "field": "chapterId" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Both end in '_id' but a snapshot version token is not an album identifier",
-          "producer": { "endpoint": "/playlists/tracks", "field": "snapshot_id" },
-          "consumer": { "endpoint": "/albums/tracks", "field": "album_id" },
-          "value_generator": "token"
-        },
-        {
-          "pattern": "Both small integers in overlapping ranges (0-50/100), but volume and result limit are unrelated",
-          "producer": { "endpoint": "/me/player/volume", "field": "volume_percent" },
-          "consumer": { "endpoint": "/me/top", "field": "limit" },
-          "value_generator": "int"
-        },
-        {
-          "pattern": "Numeric millisecond value cannot be an ISO country code",
-          "producer": { "endpoint": "/me/player/seek", "field": "position_ms" },
-          "consumer": { "endpoint": "/tracks", "field": "market" },
-          "value_generator": "int"
-        },
-        {
-          "pattern": "Both are integers with plausible overlapping ranges, but popularity score is not a pagination offset",
-          "producer": { "endpoint": "/artists", "field": "popularity" },
-          "consumer": { "endpoint": "/browse/categories", "field": "offset" },
-          "value_generator": "int"
-        },
-        {
-          "pattern": "Both are opaque token-like strings, but an OAuth access token is not a playlist snapshot id",
-          "producer": { "endpoint": "/me", "field": "access_token" },
-          "consumer": { "endpoint": "/playlists/items", "field": "snapshot_id" },
-          "value_generator": "jwt"
-        },
-        {
-          "pattern": "Both are free-text strings, but a user's display name is not meant as a catalog search query",
-          "producer": { "endpoint": "/me", "field": "display_name" },
-          "consumer": { "endpoint": "/search", "field": "q" },
-          "value_generator": "string"
-        },
-        {
-          "pattern": "Millisecond integer vs a count-like limit; numeric type matches, semantics do not",
-          "producer": { "endpoint": "/tracks", "field": "duration_ms" },
-          "consumer": { "endpoint": "/me/tracks", "field": "limit" },
-          "value_generator": "int"
-        },
-        {
-          "pattern": "Both small integers, but track number within an album is unrelated to recommendation limit",
-          "producer": { "endpoint": "/albums/tracks", "field": "track_number" },
-          "consumer": { "endpoint": "/recommendations", "field": "limit" },
-          "value_generator": "int"
-        },
-        {
-          "pattern": "Semantically adjacent classification words ('genres' vs 'type'), but a genre seed is not a valid top 'type' (artists/tracks)",
-          "producer": { "endpoint": "/recommendations/available-genre-seeds", "field": "genres" },
-          "consumer": { "endpoint": "/me/top", "field": "type" },
-          "value_generator": "string"
-        },
-        {
-          "pattern": "Both short string enums/codes, but a market code is not a search type",
-          "producer": { "endpoint": "/markets", "field": "markets" },
-          "consumer": { "endpoint": "/search", "field": "type" },
-          "value_generator": "string"
-        },
-        {
-          "pattern": "Identical field name 'state' but boolean shuffle state is incompatible with repeat enum (track/context/off)",
-          "producer": { "endpoint": "/me/player/shuffle", "field": "state" },
-          "consumer": { "endpoint": "/me/player/repeat", "field": "state" },
-          "value_generator": "string"
-        },
-        {
-          "pattern": "Both are date/time values, but release date is not the moment the user saved the album",
-          "producer": { "endpoint": "/albums", "field": "release_date" },
-          "consumer": { "endpoint": "/me/albums", "field": "added_at" },
-          "value_generator": "string"
-        },
-        {
-          "pattern": "Both are URL/URI-like strings, but an image URL is not a playback context URI",
-          "producer": { "endpoint": "/playlists/images", "field": "url" },
-          "consumer": { "endpoint": "/me/player/play", "field": "context_uri" },
-          "value_generator": "string"
-        },
-        {
-          "pattern": "Numeric audio-related fields (tempo in BPM vs volume level) with unrelated semantics",
-          "producer": { "endpoint": "/audio-features", "field": "tempo" },
-          "consumer": { "endpoint": "/me/player/volume", "field": "volume_percent" },
-          "value_generator": "int"
-        },
-        {
-          "pattern": "Both pagination-related, but a cursor 'after' (artist id) is not a numeric offset",
-          "producer": { "endpoint": "/me/following", "field": "after" },
-          "consumer": { "endpoint": "/me/tracks", "field": "offset" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Same '_id' suffix and string type, but category and device are far-apart domains",
-          "producer": { "endpoint": "/browse/categories", "field": "category_id" },
-          "consumer": { "endpoint": "/me/player/volume", "field": "device_id" },
-          "value_generator": "id"
-        },
-        {
-          "pattern": "Both relate to users/followers semantically, but a follower count is not a user identifier",
-          "producer": { "endpoint": "/playlists/followers", "field": "total" },
-          "consumer": { "endpoint": "/users", "field": "user_id" },
-          "value_generator": "int"
-        }
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files", "field": "name"}, "consumer": {"endpoint": "/groups", "field": "name"}, "value_generator": "string"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files", "field": "mimeType"}, "consumer": {"endpoint": "/emails", "field": "mimeType"}, "value_generator": "string"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files", "field": "size"}, "consumer": {"endpoint": "/files", "field": "pageSize"}, "value_generator": "int"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files/permissions", "field": "type"}, "consumer": {"endpoint": "/billing", "field": "type"}, "value_generator": "string"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files", "field": "parents"}, "consumer": {"endpoint": "/users/guardians", "field": "parentEmail"}, "value_generator": "string"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files", "field": "createdTime"}, "consumer": {"endpoint": "/files/permissions", "field": "createdTimeZone"}, "value_generator": "string"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files", "field": "trashed"}, "consumer": {"endpoint": "/files/permissions", "field": "trashedNotifications"}, "value_generator": "bool"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files", "field": "webViewLink"}, "consumer": {"endpoint": "/files/permissions", "field": "viewLinkCount"}, "value_generator": "int"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/auth/login", "field": "tokenType"}, "consumer": {"endpoint": "/files", "field": "pageToken"}, "value_generator": "string"},
+        {"pattern": "lexical_match_semantic_mismatch", "producer": {"endpoint": "/files/permissions", "field": "role"}, "consumer": {"endpoint": "/users", "field": "roleCount"}, "value_generator": "int"},
+
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "size"}, "consumer": {"endpoint": "/users", "field": "email"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "trashed"}, "consumer": {"endpoint": "/auth/login", "field": "password"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "createdTime"}, "consumer": {"endpoint": "/billing", "field": "invoiceNumber"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files/permissions", "field": "domain"}, "consumer": {"endpoint": "/files", "field": "pageSize"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "name"}, "consumer": {"endpoint": "/sessions", "field": "refresh_token"}, "value_generator": "token"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files/copy", "field": "id"}, "consumer": {"endpoint": "/settings", "field": "darkMode"}, "value_generator": "bool"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "webViewLink"}, "consumer": {"endpoint": "/users", "field": "age"}, "value_generator": "int"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files/permissions", "field": "role"}, "consumer": {"endpoint": "/files/export", "field": "format"}, "value_generator": "string"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "mimeType"}, "consumer": {"endpoint": "/auth/login", "field": "jwt"}, "value_generator": "jwt"},
+        {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "nextPageToken"}, "consumer": {"endpoint": "/files/permissions", "field": "emailAddress"}, "value_generator": "string"}
       ],
-      "base_url": "https://api.spotify.com"
+      "base_url": "https://www.googleapis.com/drive/v3"
     }
   }
 }
