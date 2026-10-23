@@ -97,6 +97,181 @@
         {"pattern": "semantic_lexical_mismatch", "producer": {"endpoint": "/files", "field": "nextPageToken"}, "consumer": {"endpoint": "/files/permissions", "field": "emailAddress"}, "value_generator": "string"}
       ],
       "base_url": "https://www.googleapis.com/drive/v3"
+    },
+    "gitlab": {
+      "positive_pairs": [
+        {
+          "pattern": "semantic_lexical_match",
+          "producer": {"endpoint": "/groups/access_requests", "field": "user_id"},
+          "consumer": {"endpoint": "/groups/access_requests/approve", "field": "useridentifier"},
+          "value_generator": "id"
+        },
+        {
+          "pattern": "semantic_lexical_match",
+          "producer": {"endpoint": "/projects/badges", "field": "link_url"},
+          "consumer": {"endpoint": "/projects/badges/render", "field": "link-url"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_lexical_match",
+          "producer": {"endpoint": "/admin/clusters/add", "field": "cluster_uid"},
+          "consumer": {"endpoint": "/admin/clusters", "field": "uid"},
+          "value_generator": "uuid"
+        },
+        {
+          "pattern": "semantic_lexical_match",
+          "producer": {"endpoint": "/groups/access_requests/approve", "field": "access_level"},
+          "consumer": {"endpoint": "/projects/access_requests/approve", "field": "accessLevel"},
+          "value_generator": "int"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/projects/badges", "field": "name"},
+          "consumer": {"endpoint": "/groups/badges", "field": "badge_title"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/groups/access_requests", "field": "per_page"},
+          "consumer": {"endpoint": "/projects/badges", "field": "limit"},
+          "value_generator": "int"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/applications", "field": "redirect_uri"},
+          "consumer": {"endpoint": "/applications", "field": "callback_url"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/broadcast_messages", "field": "ends_at"},
+          "consumer": {"endpoint": "/broadcast_messages", "field": "expires_at"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/projects/repository/branches", "field": "search"},
+          "consumer": {"endpoint": "/groups/badges", "field": "query"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/projects/jobs", "field": "token"},
+          "consumer": {"endpoint": "/admin/clusters", "field": "api_credential"},
+          "value_generator": "jwt"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/admin/clusters/add", "field": "platform_kubernetes_token"},
+          "consumer": {"endpoint": "/admin/ci/variables", "field": "cluster_secret_value"},
+          "value_generator": "token"
+        },
+        {
+          "pattern": "semantic_match_lexical_mismatch",
+          "producer": {"endpoint": "/application/plan_limits", "field": "plan_name"},
+          "consumer": {"endpoint": "/metadata", "field": "tier_title"},
+          "value_generator": "string"
+        }
+      ],
+      "negative_pairs": [
+        {
+          "pattern": "lexical_match_semantic_mismatch",
+          "producer": {"endpoint": "/projects/repository/branches/protect", "field": "developers_can_push"},
+          "consumer": {"endpoint": "/projects/repository/branches/protect", "field": "developers_can_merge"},
+          "value_generator": "bool"
+        },
+        {
+          "pattern": "lexical_match_semantic_mismatch",
+          "producer": {"endpoint": "/projects/badges", "field": "image_url"},
+          "consumer": {"endpoint": "/projects/badges", "field": "link_url"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "lexical_match_semantic_mismatch",
+          "producer": {"endpoint": "/groups/access_requests", "field": "user_id"},
+          "consumer": {"endpoint": "/projects/badges", "field": "project_id"},
+          "value_generator": "id"
+        },
+        {
+          "pattern": "lexical_match_semantic_mismatch",
+          "producer": {"endpoint": "/admin/batched_background_migrations", "field": "id"},
+          "consumer": {"endpoint": "/projects/badges", "field": "badgeId"},
+          "value_generator": "id"
+        },
+        {
+          "pattern": "lexical_match_semantic_mismatch",
+          "producer": {"endpoint": "/projects/repository/branches", "field": "page_token"},
+          "consumer": {"endpoint": "/broadcast_messages", "field": "page"},
+          "value_generator": "int"
+        },
+        {
+          "pattern": "lexical_match_semantic_mismatch",
+          "producer": {"endpoint": "/broadcast_messages", "field": "starts_at"},
+          "consumer": {"endpoint": "/broadcast_messages", "field": "ends_at"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/projects/repository/branches", "field": "regex"},
+          "consumer": {"endpoint": "/admin/clusters", "field": "namespace_per_environment"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/avatar", "field": "size"},
+          "consumer": {"endpoint": "/projects/repository/branches/protect", "field": "developers_can_push"},
+          "value_generator": "int"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/applications", "field": "confidential"},
+          "consumer": {"endpoint": "/projects/badges", "field": "image_url"},
+          "value_generator": "bool"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/broadcast_messages", "field": "font"},
+          "consumer": {"endpoint": "/admin/ci/variables", "field": "variable_type"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/application/plan_limits", "field": "ci_active_jobs"},
+          "consumer": {"endpoint": "/projects/repository/branches", "field": "sort"},
+          "value_generator": "int"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/admin/batched_background_migrations", "field": "database"},
+          "consumer": {"endpoint": "/projects/badges", "field": "link_url"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/version", "field": "version"},
+          "consumer": {"endpoint": "/projects/access_requests", "field": "access_level"},
+          "value_generator": "string"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/admin/clusters/add", "field": "management_project_id"},
+          "consumer": {"endpoint": "/bulk_imports", "field": "status"},
+          "value_generator": "id"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/admin/ci/variables", "field": "masked"},
+          "consumer": {"endpoint": "/groups/badges", "field": "name"},
+          "value_generator": "bool"
+        },
+        {
+          "pattern": "semantic_lexical_mismatch",
+          "producer": {"endpoint": "/projects/alert_management_alerts/metric_images", "field": "metric_image_id"},
+          "consumer": {"endpoint": "/applications", "field": "redirect_uri"},
+          "value_generator": "id"
+        }
+      ],
+      "base_url": "https://www.gitlab.com/api/v4"
     }
   }
 }
