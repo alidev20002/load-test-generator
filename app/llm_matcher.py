@@ -1,15 +1,4 @@
-"""Lightweight-LLM field-name matcher for smart dependency detection.
-
-Opt-in alternative to the LCS + Porter-stemming name check in
-``validator.py``. The pipeline is unchanged:
-
-1. values must be exactly equal (checked by the caller/validator),
-2. if equal, this module asks a small LLM whether the two field names
-   plausibly denote the same concept, given both endpoints and the
-   consumer field location.
-
-Only stdlib is used for HTTP so no new dependencies are required.
-
+"""
 Supported backends:
 - ``ollama`` (default): local Ollama server, ``POST {endpoint}/api/generate``.
 - ``openai-compatible``: any ``POST {endpoint}/v1/chat/completions`` server
@@ -26,6 +15,8 @@ import json
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable
+
+from prompts import LLM_PROMPTS
 
 # Canonical consumer-field locations. Accepts human variants
 # ("query param", "body param", ...) and normalizes them.
@@ -119,79 +110,23 @@ def build_prompt(producer_endpoint: str, producer_field: str,
                  consumer_field: str, consumer_value: str,
                  location: str) -> str:
     loc = normalize_location(location)
-    return f"""You are verifying whether two fields observed in HTTP traffic represent a producer-consumer data dependency (a value produced by one API response is consumed by a later API request).
-
-### API 1 (Producer / Response):
-Endpoint: {producer_endpoint}
-Field: <CANDIDATE>{producer_field}</CANDIDATE>
-Value: {producer_value}
-
-### API 2 (Consumer / Request):
-Endpoint: {consumer_endpoint}
-Location: {loc}
-Field: <CANDIDATE>{consumer_field}</CANDIDATE>
-Value: {consumer_value}
-
-### Question:
-Does API 2 genuinely depend on the value produced by API 1 in this field? Field names may differ lexically but refer to the same concept (e.g. an authentication token embedded with a scheme prefix like 'Bearer '). Coincidentally equal common values (booleans, small numbers) or unrelated entities that merely share a value do NOT constitute a real dependency.
-
-Respond ONLY with a JSON object in this exact format, nothing else:
-{{"dependency": true or false, "confidence": 0.0-1.0, "reasoning": "brief reason"}}
-"""
-
-
-def parse_yes_no(text: str | None) -> bool | None:
-    """Parse a plain YES/NO answer to True/False, None when ambiguous."""
-    if not text:
-        return None
-    t = text.strip().upper()
-    if t.startswith("YES"):
-        return True
-    if t.startswith("NO"):
-        return False
-    # Fallback: single-word occurrence anywhere (avoids matching "unknown").
-    import re
-    tokens = re.findall(r"\b(YES|NO)\b", t)
-    if len(tokens) == 1:
-        return tokens[0] == "YES"
-    if tokens and all(x == tokens[0] for x in tokens):
-        return tokens[0] == "YES"
-    return None
+    return LLM_PROMPTS.get('version-1.0').format(
+        producer_endpoint=producer_endpoint,
+        producer_field=producer_field, 
+        producer_value=producer_value, 
+        consumer_endpoint=consumer_endpoint, 
+        loc=location,
+        consumer_field=consumer_field, 
+        consumer_value=consumer_value
+    )
 
 
 def parse_dependency_answer(text: str | None) -> bool | None:
-    """Parse an LLM answer to True/False, None when ambiguous.
-
-    Understands the JSON format requested by :func:`build_prompt`
-    (``{"dependency": true/false, ...}``, optionally wrapped in code
-    fences) and falls back to :func:`parse_yes_no` for plain YES/NO
-    answers (stub / predict_fn / terse models).
-    """
+    """Parse an LLM answer to True/False, True when ambiguous."""
     if not text:
-        return None
-    import re
-    t = text.strip()
-    # strip ```json ... ``` fences if present
-    m = re.search(r"```(?:json)?\s*(.*?)```", t, re.DOTALL | re.IGNORECASE)
-    if m:
-        t = m.group(1).strip()
-    # try JSON object with a "dependency" bool
-    if "dependency" in t.lower():
-        try:
-            start, end = t.index("{"), t.rindex("}") + 1
-            obj = json.loads(t[start:end])
-            dep = obj.get("dependency")
-            if isinstance(dep, bool):
-                return dep
-            if isinstance(dep, str):
-                v = dep.strip().lower()
-                if v in ("true", "yes", "1"):
-                    return True
-                if v in ("false", "no", "0"):
-                    return False
-        except Exception:
-            pass
-    return parse_yes_no(text)
+        return True
+
+    return "true" in text.lower()
 
 
 def _post_json(url: str, payload: dict, timeout: float,
