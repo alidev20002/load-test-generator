@@ -216,12 +216,11 @@ def main():
                 )
             except Exception as e:
                 llm_pred = None
-                conf = "ERR"
                 llm_failures.append((case["id"], str(e)))
 
             llm_ok = (llm_pred == gt) if llm_pred is not None else False
             llm_correct += int(llm_ok)
-            row += f"{str(llm_pred):<6} {str(conf):<6} "
+            row += f"{str(llm_pred):<6} "
 
         row += f"{'OK' if lcs_ok else 'X':<7} "
         if not args.lcs_only:
