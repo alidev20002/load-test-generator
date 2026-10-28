@@ -16,7 +16,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Callable
 
-from prompts import LLM_PROMPTS
+from .prompts import LLM_PROMPTS
 
 # Canonical consumer-field locations. Accepts human variants
 # ("query param", "body param", ...) and normalizes them.
