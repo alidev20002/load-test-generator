@@ -1,112 +1,66 @@
-"""
-Pilot Testbed: E2E-Loader++ (faithful reimplementation) vs. LLM prompting
-===========================================================================
-
-  (الف) بازتولید *وفادار* منطق AtomicDependencyValidator.java، شامل:
-        - دروازه‌ی value equality (با special-case های Authorization
-          در Header و Cookie، دقیقاً همان substring(7)/contains())
-        - Porter Stemming (همان الگوریتم OpenNLP PorterStemmer،
-          پیاده‌سازی معادل با nltk.stem.porter)
-        - id_completion (هم حالت nested-father و هم fallback مبتنی بر
-          URL segments، با همان عدم‌تقارن stemming موجود در کد اصلی)
-        - LCS ratio با threshold=0.44 (دقیقاً مقدار کد اصلی)
-
-  (ب) پرامپت‌دهی به یک LLM محلی از طریق Ollama
-
-نکته‌ی صداقت علمی: بخش (الف) با خواندن دقیق خط‌به‌خط
-AtomicDependencyValidator.java, HeaderDependency.java, UrlDependency.java
-بازتولید شده و شامل quirk های خود کد اصلی است (مثل عدم stemming دوباره‌ی
-atomic_name در شاخه‌ی father-exists) — چون هدف مقایسه با رفتار *واقعی*
-ابزار است، نه یک نسخه‌ی ایده‌آل‌شده از آن.
-
-اجرا:
-    python run_pilot.py                     # هر دو روش
-    python run_pilot.py --lcs-only          # فقط بازتولید E2E-Loader++ (بدون نیاز به Ollama)
-"""
 
 import json
-import re
 import argparse
+import time
+from collections import defaultdict
 from urllib.parse import urlparse
 
 from nltk.stem.porter import PorterStemmer
 
 from llm_matcher_sample import field_match, LLMConfig
 
-LCS_THRESHOLD = 0.44   # دقیقاً همان مقدار lcs_deadline در AtomicDependencyValidator.java
+
+LCS_THRESHOLD = 0.44
+
+LLM_ENDPOINT = "http://192.168.10.47:11434"
+LLM_MODEL = "qwen2.5vl:7b"
 
 _stemmer = PorterStemmer()
 
 
-# ─────────────────────────────────────────────
-# بخش ۱ — بازتولید وفادار E2E-Loader++
-# ─────────────────────────────────────────────
-
 def porter_stem(word: str) -> str:
-    """معادل porter_stamming() در کد جاوا."""
     return _stemmer.stem(word)
 
 
 def lcs_ratio(name1: str, name2: str) -> float:
-    """
-    معادل LCS.LCSubStr(): طولانی‌ترین زیررشته‌ی *پیوسته*‌ی مشترک
-    تقسیم بر طول رشته‌ی بزرگ‌تر.
-    """
     name1, name2 = name1.lower(), name2.lower()
     m, n = len(name1), len(name2)
+
     if m == 0 or n == 0:
         return 0.0
+
     dp = [[0] * (n + 1) for _ in range(m + 1)]
     best = 0
+
     for i in range(1, m + 1):
         for j in range(1, n + 1):
             if name1[i - 1] == name2[j - 1]:
                 dp[i][j] = dp[i - 1][j - 1] + 1
                 best = max(best, dp[i][j])
+
     return best / max(m, n)
 
 
-def id_completion_with_father(child: str, father_name_lower: str) -> str:
-    """
-    معادل دقیق id_complention(String child, String father) وقتی
-    caller آن را با father=porter_stamming(father.getName().toLowerCase())
-    فراخوانی می‌کند. داخل خود متد، این father یک‌بار دیگر stem می‌شود
-    (idempotent در اکثر موارد، ولی برای وفاداری کامل حفظ شده است).
-    """
-    father_stemmed_once = porter_stem(father_name_lower)
-    if len(child) <= 3:
-        return porter_stem(father_stemmed_once) + child
-    return child
-
-
 def id_completion_url_fallback(child: str, producer_url: str):
-    """
-    معادل دقیق id_complention(String child, Request request):
-    وقتی father وجود ندارد و child کوتاه است (<=3 کاراکتر)، از دو
-    سگمنت آخر URL خود عملیات *تولیدکننده* (نه مصرف‌کننده) کاندید می‌سازد.
-    """
-    if len(child) <= 3:
-        path = urlparse(producer_url).path
-        subpath = path.split("/")
-        # پدینگ برای جلوگیری از IndexError در URL های خیلی کوتاه
-        while len(subpath) < 2:
-            subpath = [""] + subpath
-        last = subpath[-1] if subpath[-1] != "" else (subpath[-2] if len(subpath) > 1 else "")
-        second_last = subpath[-2] if len(subpath) > 1 else ""
-        return [
-            porter_stem(last) + child,
-            porter_stem(second_last) + child,
-        ]
-    return [child]
+    if len(child) > 3:
+        return [child]
+
+    path = urlparse(producer_url).path
+    subpath = path.split("/")
+
+    while len(subpath) < 2:
+        subpath = [""] + subpath
+
+    last = subpath[-1] if subpath[-1] else subpath[-2]
+    second_last = subpath[-2] if len(subpath) > 1 else ""
+
+    return [
+        porter_stem(last) + child,
+        porter_stem(second_last) + child,
+    ]
 
 
 def value_gate(case: dict) -> bool:
-    """
-    دروازه‌ی value equality، شامل special-case های واقعی کد جاوا:
-      - Header با نام دقیقاً "Authorization"  -> substring(7) روی مقدار consumer
-      - Cookie که نامش شامل substring "Authorization" است -> بدون هیچ تبدیلی
-      - سایر موارد (Header عادی، QueryParam، Param، URL) -> برابری مستقیم
-    """
     producer = case["producer"]
     consumer = case["consumer"]
     loc = consumer["location"]
@@ -119,125 +73,306 @@ def value_gate(case: dict) -> bool:
     if loc.lower() == "cookie" and "Authorization" in consumer["field"]:
         return producer["value"] == consumer["value"]
 
-    # Header غیر-Authorization، QueryParam، Param، URL: برابری مستقیم
     return producer["value"] == consumer["value"]
 
 
 def name_gate(case: dict) -> bool:
-    """
-    بازتولید دقیق بخش نام‌محور general_atomic_comparioson /
-    evaluate_url_atomic_dep (این دو از نظر منطق نام‌محور یکسان‌اند).
-    """
     producer = case["producer"]
     consumer = case["consumer"]
 
-    to_lower_name = consumer["field"].lower()
-    atomic_name = producer["field"].lower()
-    # father = producer.get("father", "")
+    consumer_name = porter_stem(consumer["field"].lower())
+    candidates = id_completion_url_fallback(
+        producer["field"].lower(),
+        producer["endpoint"],
+    )
 
-    # if father:
-    #     # شاخه‌ی father-exists: توجه به عدم‌تقارن stemming در کد اصلی -
-    #     # فقط to_name استم می‌شود، atomic_name (بعد از احتمالاً completion) خیر.
-    #     atomic_name_completed = id_completion_with_father(atomic_name, father.lower())
-    #     to_name_stamm = porter_stem(to_lower_name)
-    #     ratio = lcs_ratio(to_name_stamm, atomic_name_completed)
-    #     return ratio >= LCS_THRESHOLD
+    for candidate in candidates:
+        candidate_stem = porter_stem(candidate)
 
-    # شاخه‌ی no-father: هر دو طرف استم می‌شوند
-    candidates = id_completion_url_fallback(atomic_name, producer["endpoint"])
-    to_name_stamm = porter_stem(to_lower_name)
-    for cand in candidates:
-        cand_stamm = porter_stem(cand)
-        ratio = lcs_ratio(to_name_stamm, cand_stamm)
-        if ratio >= LCS_THRESHOLD:
+        if lcs_ratio(consumer_name, candidate_stem) >= LCS_THRESHOLD:
             return True
+
     return False
 
 
 def e2eloaderpp_predict(case: dict) -> bool:
-    """پیش‌بینی کامل: دروازه‌ی مقدار سپس دروازه‌ی نام (دقیقاً ترتیب کد اصلی)."""
-    if not value_gate(case):
-        return False
-    return name_gate(case)
+    return value_gate(case) and name_gate(case)
 
 
+def llm_predict(case: dict, cfg: LLMConfig) -> bool | None:
+    return field_match(
+        producer_endpoint=case["producer"]["endpoint"],
+        producer_field=case["producer"]["field"],
+        producer_value=case["producer"]["value"],
+        consumer_endpoint=case["consumer"]["endpoint"],
+        consumer_field=case["consumer"]["field"],
+        consumer_value=case["consumer"]["value"],
+        location=case["consumer"]["location"],
+        cfg=cfg,
+    )
 
 
-# ─────────────────────────────────────────────
-# بخش ۳ — اجرا و گزارش
-# ─────────────────────────────────────────────
+def calculate_metrics(cases: list[dict], predictions: list[bool | None]):
+    """Calculate binary metrics; exclude None from confusion-matrix counts."""
+    tp = fp = tn = fn = invalid = 0
+
+    for case, pred in zip(cases, predictions):
+        gt = case["ground_truth"]
+
+        if pred is None:
+            invalid += 1
+            continue
+
+        if pred == gt:
+            if gt:
+                tp += 1
+            else:
+                tn += 1
+        else:
+            if pred:
+                fp += 1
+            else:
+                fn += 1
+
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision + recall
+        else 0.0
+    )
+
+    valid = tp + fp + tn + fn
+    correct = tp + tn
+    total = len(cases)
+
+    return {
+        "tp": tp,
+        "fp": fp,
+        "tn": tn,
+        "fn": fn,
+        "invalid": invalid,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "accuracy": correct / valid if valid else 0.0,
+        "valid": valid,
+        "total": total,
+        # Invalid predictions are incorrect for overall benchmark accuracy.
+        "overall_accuracy": correct / total if total else 0.0,
+    }
+
+
+def print_report(
+    method_name: str,
+    cases: list[dict],
+    predictions: list[bool | None],
+):
+    metrics = calculate_metrics(cases, predictions)
+
+    print(f"\n{'=' * 65}")
+    print(f"{method_name} - Evaluation Metrics")
+    print("=" * 65)
+
+    print(f"TP        : {metrics['tp']}")
+    print(f"FP        : {metrics['fp']}")
+    print(f"TN        : {metrics['tn']}")
+    print(f"FN        : {metrics['fn']}")
+    print(f"Invalid   : {metrics['invalid']}")
+    print(f"Precision : {metrics['precision']:.4f}")
+    print(f"Recall    : {metrics['recall']:.4f}")
+    print(f"F1        : {metrics['f1']:.4f}")
+
+    print(
+        f"Accuracy (valid predictions): "
+        f"{metrics['accuracy']:.4f} "
+        f"({metrics['tp'] + metrics['tn']}/{metrics['valid']})"
+    )
+    print(
+        f"Overall accuracy: "
+        f"{metrics['overall_accuracy']:.4f} "
+        f"({metrics['tp'] + metrics['tn']}/{metrics['total']})"
+    )
+
+    # Count incorrect predictions by pattern.
+    pattern_errors = defaultdict(
+        lambda: {"total": 0, "fp": 0, "fn": 0, "invalid": 0}
+    )
+
+    for case, pred in zip(cases, predictions):
+        pattern = case.get("pattern", "UNKNOWN")
+        gt = case["ground_truth"]
+
+        if pred is None:
+            pattern_errors[pattern]["total"] += 1
+            pattern_errors[pattern]["invalid"] += 1
+        elif pred != gt:
+            pattern_errors[pattern]["total"] += 1
+
+            if pred is True:
+                pattern_errors[pattern]["fp"] += 1
+            else:
+                pattern_errors[pattern]["fn"] += 1
+
+    print(f"\n{method_name} - Errors by Pattern")
+    print("-" * 65)
+    print(
+        f"{'Pattern':<28} {'Errors':>8} "
+        f"{'FP':>8} {'FN':>8} {'Invalid':>9}"
+    )
+    print("-" * 65)
+
+    if not pattern_errors:
+        print("No patterns found.")
+        return
+
+    for pattern, counts in sorted(
+        pattern_errors.items(),
+        key=lambda item: (-item[1]["total"], item[0]),
+    ):
+        print(
+            f"{pattern:<28} "
+            f"{counts['total']:>8} "
+            f"{counts['fp']:>8} "
+            f"{counts['fn']:>8} "
+            f"{counts['invalid']:>9}"
+        )
+
+    print("-" * 65)
+    print(
+        f"{'TOTAL':<28} "
+        f"{sum(x['total'] for x in pattern_errors.values()):>8} "
+        f"{sum(x['fp'] for x in pattern_errors.values()):>8} "
+        f"{sum(x['fn'] for x in pattern_errors.values()):>8} "
+        f"{sum(x['invalid'] for x in pattern_errors.values()):>9}"
+    )
+
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--lcs-only", action="store_true",
-                         help="فقط بازتولید E2E-Loader++ را اجرا کن (بدون نیاز به Ollama)")
-    parser.add_argument("--cases", default="generated_cases.json")
+    parser = argparse.ArgumentParser(
+        description="Benchmark E2E-Loader++ LCS against LLM field matching."
+    )
+
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--lcs-only",
+        action="store_true",
+        help="Run only E2E-Loader++ (LCS).",
+    )
+    mode.add_argument(
+        "--llm-only",
+        action="store_true",
+        help="Run only the LLM.",
+    )
+
+    parser.add_argument(
+        "--cases",
+        default="generated_cases.json",
+        help="Path to the generated test cases JSON file.",
+    )
+    parser.add_argument("--model", default=LLM_MODEL)
+    parser.add_argument("--endpoint", default=LLM_ENDPOINT)
+
     args = parser.parse_args()
 
     with open(args.cases, "r", encoding="utf-8") as f:
         cases = json.load(f)
 
-    header = f"{'ID':<32} {'GT':<6} {'LCS':<6} "
-    header += f"{'LLM':<6} " if not args.lcs_only else ""
-    header += f"{'LCS_OK':<7} "
-    header += f"{'LLM_OK':<7}" if not args.lcs_only else ""
-    print(header)
-    print("-" * (len(header) + 5))
+    run_lcs = not args.llm_only
+    run_llm = not args.lcs_only
 
-    lcs_correct = 0
-    llm_correct = 0
+    cfg = LLMConfig(
+        provider="ollama",
+        endpoint=args.endpoint,
+        model=args.model,
+        fallback_to_lcs=False,
+        cache_enabled=False,
+    )
+
+    print(f"Test cases : {len(cases)}")
+    print(
+        "Mode       : "
+        f"{'LCS only' if args.lcs_only else 'LLM only' if args.llm_only else 'LCS + LLM'}"
+    )
+
+    if run_llm:
+        print(f"LLM model  : {cfg.model}")
+        print(f"Endpoint   : {cfg.endpoint}")
+
+    print()
+
+    header = f"{'ID':<32} {'GT':<8}"
+
+    if run_lcs:
+        header += f"{'LCS':<8} "
+
+    if run_llm:
+        header += f"{'LLM':<8} "
+
+    if run_lcs:
+        header += f"{'LCS_OK':<8} "
+
+    if run_llm:
+        header += f"{'LLM_OK':<8}"
+
+    print(header)
+    print("-" * len(header))
+
+    lcs_predictions = []
+    llm_predictions = []
     llm_failures = []
+
+    benchmark_start = time.perf_counter()
 
     for case in cases:
         gt = case["ground_truth"]
-        lcs_pred = e2eloaderpp_predict(case)
-        lcs_ok = (lcs_pred == gt)
-        lcs_correct += int(lcs_ok)
+        row = f"{case['id']:<32} {str(gt):<8}"
 
-        row = f"{case['id']:<32} {str(gt):<6} {str(lcs_pred):<6} "
+        if run_lcs:
+            lcs_pred = e2eloaderpp_predict(case)
+            lcs_predictions.append(lcs_pred)
+            lcs_ok = lcs_pred == gt
+            row += f"{str(lcs_pred):<8} "
 
-        if not args.lcs_only:
+        if run_llm:
             try:
-                llm_pred = field_match(
-                    producer_endpoint=case['producer']['endpoint'],
-                    producer_field=case['producer']['field'],
-                    producer_value=case['producer']['value'],
-                    consumer_endpoint=case['consumer']['endpoint'],
-                    consumer_field=case['consumer']['field'],
-                    consumer_value=case['consumer']['value'],
-                    location=case['consumer']['location'],
-                    cfg=LLMConfig(
-                        provider='ollama',
-                        endpoint='http://185.239.2.48:11434',
-                        model='',
-                        fallback_to_lcs=False,
-                        cache_enabled=False
-                    )
-                )
-            except Exception as e:
+                llm_pred = llm_predict(case, cfg)
+            except Exception as exc:
                 llm_pred = None
-                llm_failures.append((case["id"], str(e)))
+                llm_failures.append((case["id"], str(exc)))
 
-            llm_ok = (llm_pred == gt) if llm_pred is not None else False
-            llm_correct += int(llm_ok)
-            row += f"{str(llm_pred):<6} "
+            llm_predictions.append(llm_pred)
+            llm_ok = llm_pred == gt
+            row += f"{str(llm_pred):<8} "
 
-        row += f"{'OK' if lcs_ok else 'X':<7} "
-        if not args.lcs_only:
-            row += f"{'OK' if llm_ok else 'X':<7}"
+        if run_lcs:
+            row += f"{'OK' if lcs_ok else 'X':<8} "
+
+        if run_llm:
+            row += f"{'OK' if llm_ok else 'X':<8}"
 
         print(row)
 
-    n = len(cases)
-    print("-" * (len(header) + 5))
-    print(f"E2E-Loader++ (faithful) accuracy: {lcs_correct}/{n} ({100*lcs_correct/n:.1f}%)")
-    if not args.lcs_only:
-        print(f"LLM accuracy:                     {llm_correct}/{n} ({100*llm_correct/n:.1f}%)")
+    elapsed = time.perf_counter() - benchmark_start
+
+    print("-" * len(header))
+
+    if run_lcs:
+        print_report("E2E-Loader++ (LCS)", cases, lcs_predictions)
+
+    if run_llm:
+        print_report(f"LLM ({cfg.model})", cases, llm_predictions)
+
+    print(f"\nBenchmark time: {elapsed:.2f} seconds")
+
+    if cases:
+        print(f"Average time per case: {elapsed / len(cases):.3f} seconds")
 
     if llm_failures:
-        print("\nLLM call failures (is 'ollama serve' running? is the model pulled?):")
-        for case_id, err in llm_failures:
-            print(f"  - {case_id}: {err}")
+        print(f"\nLLM request failures: {len(llm_failures)}")
+
+        for case_id, error in llm_failures:
+            print(f"  - {case_id}: {error}")
 
 
 if __name__ == "__main__":
