@@ -19,15 +19,25 @@ Respond ONLY with a JSON object in this exact format, nothing else:
 {{"dependency": true or false}}
 """,
     "version-2.0": """Determine whether the producer and consumer fields are semantically related based on their names and API endpoint contexts.
- 
+
 Producer endpoint: {producer_endpoint}
 Producer field: {producer_field}
- 
+
 Consumer endpoint: {consumer_endpoint}
 Consumer field: {consumer_field}
- 
-Return true if both fields represent the same or closely related concept and could plausibly form a producer-consumer dependency. Consider synonyms, abbreviations, and naming variations. Return false if they represent different or unrelated concepts, even if their names look similar.
- 
+
+Return true if both fields represent the same or closely related concept and could plausibly form a producer-consumer dependency. Consider synonyms, abbreviations, and naming variations.
+
+Return false if they represent different or unrelated concepts, even if their names look similar.
+
 If uncertain, return true.
+
+Output rules:
+
+Return exactly one lowercase boolean: true or false.
+
+Do not provide explanations, reasoning, punctuation, markdown, or any other text.
+
+Your entire response must be either true or false.
 """
 }
