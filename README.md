@@ -71,6 +71,6 @@ No stemming is applied on the LLM path; full endpoint strings are sent.
 
 Providers: `ollama` (default, `POST /api/generate`), `openai-compatible`
 (`POST /v1/chat/completions`, token from `configs.json` `env.OPENAI_API_KEY` /
-`env.LLM_API_KEY`), `stub` (testing). If the LLM is unreachable
+`env.LLM_API_KEY`). If the LLM is unreachable
 or ambiguous it falls back to LCS unless `fallback_to_lcs: false` is set in
 `configs.json`.
