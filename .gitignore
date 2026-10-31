@@ -3,3 +3,4 @@
 /hars
 *.txt
 /test
+.env
