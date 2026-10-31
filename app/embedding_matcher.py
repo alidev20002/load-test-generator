@@ -23,7 +23,11 @@ BASE_URLS = [
     "https://api.spotify.com/v1",
     "https://www.googleapis.com/drive/v3",
     "https://www.gitlab.com/api/v4",
-    "https://example.com/api"
+    "https://example.com/api",
+    "http://localhost:8080",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8080",
 ]
 
 
@@ -39,6 +43,14 @@ def _normalize(text: str) -> str:
 
 def _normalize_endpoint(endpoint: str, field_value: str) -> str:
     endpoint = endpoint.strip()
+
+    # Remove optional HTTP method, e.g. GET /users/{userId}.
+    endpoint = re.sub(
+        r"^\s*(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+",
+        "",
+        endpoint,
+        flags=re.IGNORECASE,
+    )
 
     # Remove only a matching base URL from the beginning.
     for base_url in BASE_URLS:
@@ -58,14 +70,6 @@ def _normalize_endpoint(endpoint: str, field_value: str) -> str:
 
     # Remove fragment.
     endpoint = endpoint.split("#", 1)[0]
-
-    # Remove optional HTTP method, e.g. GET /users/{userId}.
-    endpoint = re.sub(
-        r"^\s*(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+",
-        "",
-        endpoint,
-        flags=re.IGNORECASE,
-    )
 
     return _normalize(endpoint)
 
@@ -122,13 +126,6 @@ def field_match_embedding(
 
     # Semantic similarity of the complete endpoint + field context.
     context_score = float(np.dot(vectors[0], vectors[1]))
-
-    # Semantic similarity of field names alone.
-    field_score = float(np.dot(vectors[2], vectors[3]))
-
-    score = 0.80 * field_score + 0.20 * context_score
-
-    print(f"field score between: {texts[2]} and {texts[3]} is {field_score}")
 
     print(f"context score between: {texts[0]} and {texts[1]} is {context_score}")
 

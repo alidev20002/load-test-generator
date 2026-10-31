@@ -2,7 +2,7 @@
 const $ = (s) => document.querySelector(s);
 const state = {
   harFile: null, graph: null, mode: "LCS",
-  useLlm: false, selected: null, // {kind:'node'|'edge', id}
+  useLlm: false, useEmbedding: false, selected: null, // {kind:'node'|'edge', id}
   hiddenTypes: new Set(), nodeFilter: "", showLabels: true,
   jmxBlob: null, jmxText: "",
   view: { x: 20, y: 20, k: 1 },
@@ -146,6 +146,11 @@ $("#useLlm").onchange = (e) => {
   $("#modePill").textContent = "Mode: " + (state.useLlm ? "LLM" : "LCS");
 };
 
+$("#useEmbedding").onchange = (e) => {
+  state.useEmbedding = e.target.checked;
+  $("#modePill").textContent = "Mode: " + (state.useEmbedding ? "LLM" : "LCS");
+};
+
 /* ---------- build graph ---------- */
 function setStatus(el, msg, ok) {
   el.className = "status " + (ok === true ? "ok" : ok === false ? "err" : "");
@@ -157,6 +162,7 @@ $("#buildGraphBtn").onclick = async () => {
   const fd = new FormData();
   fd.append("har", state.harFile);
   fd.append("use_llm", state.useLlm ? "true" : "false");
+  fd.append("use_embedding", state.useEmbedding ? "true" : "false");
   try {
     const r = await fetch("/graphs/build", { method: "POST", body: fd });
     if (!r.ok) throw new Error(await r.text());
@@ -946,6 +952,7 @@ async function buildJmx(auto = false) {
   else if ($("#autoGraph").checked && !state.graph) fd.append("auto_graph", "true");
   else fd.append("graph", new Blob([JSON.stringify(state.graph)], { type: "application/json" }), "graph.json");
   fd.append("use_llm", state.useLlm ? "true" : "false");
+  fd.append("use_embedding", state.useEmbedding ? "true" : "false");
   workloadSpecs().forEach((w) => fd.append("workload", w));
   try {
     const r = await fetch("/jmx/build", { method: "POST", body: fd });

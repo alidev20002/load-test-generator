@@ -25,6 +25,7 @@ def analyze_responses(entries):
 def build_graph(har_path: str,
                 entries=None, responses=None,
                 use_llm: bool = False,
+                use_embedding: bool = False,
                 llm_config: LLMConfig | None = None) -> tuple[DependencyGraph, list, list]:
     entries = entries if entries is not None else load_har(har_path)
     responses = responses if responses is not None else analyze_responses(entries)
@@ -33,6 +34,10 @@ def build_graph(har_path: str,
         return g, entries, responses
     if use_llm:
         V.enable_llm(llm_config or LLMConfig.from_env())
+
+    if use_embedding:
+        V.enable_embedding()
+    
     try:
         g.add_request(entries[0].request, 0)
         for i in range(1, len(entries)):
@@ -49,4 +54,7 @@ def build_graph(har_path: str,
     finally:
         if use_llm:
             V.disable_llm()
+
+        if use_embedding:
+            V.disable_embedding()
     return g, entries, responses

@@ -12,6 +12,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 from .lcs import lc_substr_norm
 from . import llm_matcher as _LLM
+from . import embedding_matcher as _EMBEDDING
 from .response_model import AtomicObject, StructuredObject
 
 LCS_DEADLINE = 0.44
@@ -19,6 +20,8 @@ LCS_DEADLINE = 0.44
 # ---- LLM opt-in state (process-global; set by extractor/CLI) ----
 _LLM_ENABLED = False
 _LLM_CONFIG: _LLM.LLMConfig | None = None
+
+_EMBEDDING_ENABLED = False
 
 
 def enable_llm(config: _LLM.LLMConfig | None = None) -> _LLM.LLMConfig:
@@ -28,10 +31,17 @@ def enable_llm(config: _LLM.LLMConfig | None = None) -> _LLM.LLMConfig:
     _LLM_ENABLED = True
     return _LLM_CONFIG
 
-
 def disable_llm() -> None:
     global _LLM_ENABLED
     _LLM_ENABLED = False
+
+def enable_embedding():
+    global _EMBEDDING_ENABLED
+    _EMBEDDING_ENABLED = True
+
+def disable_embedding():
+    global _EMBEDDING_ENABLED
+    _EMBEDDING_ENABLED = False
 
 
 def llm_enabled() -> bool:
@@ -116,6 +126,14 @@ def general_atomic_comparison(atomic: AtomicObject, to_value: str, to_name: str 
                                consumer_method,
                                lcs_fallback=lambda: _name_match(
                                    to_name, atomic.name, father, from_url))
+
+    if _EMBEDDING_ENABLED:
+        return _embedding_name_match(atomic, father, to_name, from_url, consumer_url,
+                                       to_value, location, producer_method,
+                                       consumer_method,
+                                       lcs_fallback=lambda: _name_match(
+                                           to_name, atomic.name, father, from_url))
+
     return _name_match(to_name, atomic.name, father, from_url)
 
 
@@ -154,6 +172,25 @@ def _llm_name_match(atomic: AtomicObject, father: StructuredObject | None,
         return bool(lcs_fallback())
     return False
 
+def _embedding_name_match(atomic: AtomicObject, father: StructuredObject | None,
+                    to_name: str, from_url: str, consumer_url: str,
+                    value: str, location: str, producer_method: str = "",
+                    consumer_method: str = "",
+                    lcs_fallback=None) -> bool:
+    producer_endpoint = f"{producer_method} {from_url}".strip()
+    consumer_endpoint = f"{consumer_method} {consumer_url}".strip()
+    res = _EMBEDDING.field_match_embedding(
+        producer_endpoint=producer_endpoint,
+        producer_field=_qualified_producer_name(atomic, father),
+        producer_value=atomic.value,
+        consumer_endpoint=consumer_endpoint,
+        consumer_field=to_name,
+        consumer_value=value,
+    )
+    if res is not None:
+        return res
+    
+    return False
 
 def evaluate_header_atomic_dep(atomic: AtomicObject, header_name: str, header_value: str,
                                father: StructuredObject | None, from_url: str,
@@ -193,6 +230,14 @@ def evaluate_url_atomic_dep(atomic: AtomicObject, from_url: str, father: Structu
                                lcs_fallback=lambda: _lcs_url(atomic, from_url,
                                                              father,
                                                              possible_name))
+
+    if _EMBEDDING_ENABLED:
+        return _embedding_name_match(atomic, father, possible_name, from_url,
+                                        consumer_url, atomic.value, "url",
+                                        producer_method, consumer_method,
+                                        lcs_fallback=lambda: _lcs_url(atomic, from_url,
+                                                                        father,
+                                                                        possible_name))
     return _lcs_url(atomic, from_url, father, possible_name)
 
 

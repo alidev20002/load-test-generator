@@ -196,10 +196,11 @@ def update_config(body: ConfigUpdate) -> dict:
 async def graphs_build(
     har: UploadFile = File(...),
     use_llm: bool = Form(False),
+    use_embedding: bool = Form(False),
 ) -> dict:
     data = await har.read()
     entries = _entries_from_bytes(data)
-    g, _, _ = build_graph("", entries=entries, use_llm=use_llm,
+    g, _, _ = build_graph("", entries=entries, use_llm=use_llm, use_embedding=use_embedding,
                           llm_config=_resolve_llm(use_llm) if use_llm else None)
     mode = "LLM" if use_llm else "LCS"
     out = _graph_payload(g)
@@ -273,6 +274,7 @@ async def jmx_build(
     graph_file: Optional[UploadFile] = File(default=None, alias="graph"),
     auto_graph: bool = Form(False),
     use_llm: bool = Form(False),
+    use_embedding: bool = Form(False),
     workload: list[str] = Form(default=[]),
 ) -> Response:
     har_data = await har.read()
@@ -292,7 +294,7 @@ async def jmx_build(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"invalid graph file: {e}")
     elif auto_graph:
-        g, _, _ = build_graph("", entries=entries, use_llm=use_llm,
+        g, _, _ = build_graph("", entries=entries, use_llm=use_llm, use_embedding=use_embedding,
                               llm_config=_resolve_llm(use_llm) if use_llm else None)
     else:
         raise HTTPException(status_code=422,

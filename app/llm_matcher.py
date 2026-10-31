@@ -7,7 +7,7 @@ from functools import lru_cache
 from ollama import Client as OllamaClient
 from openai import OpenAI
 
-from prompts import LLM_PROMPTS
+from .prompts import LLM_PROMPTS
 
 
 # ---------------------------------------------------------------------
