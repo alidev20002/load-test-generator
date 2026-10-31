@@ -8,12 +8,20 @@ from urllib.parse import urlparse
 from nltk.stem.porter import PorterStemmer
 
 from llm_matcher_sample import field_match, LLMConfig
+from embedding_matcher import field_match_embedding
 
 
 LCS_THRESHOLD = 0.44
 
-LLM_ENDPOINT = "http://192.168.10.47:11434"
-LLM_MODEL = "qwen2.5vl:7b"
+LLM_ENDPOINT = "http://185.239.2.48:3000/v1"
+LLM_MODEL = "phi3.5:3.8b"
+API_KEY = 'sk-ci0geF30pNPVtCv8YEN1L0sR4iZtcQSUcbO4o9aEEYq7nEMB'
+PROVIDER = 'openai'
+
+EMBEDDING_THRESHOLD = 0.75
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL_NAME_2 = "BAAI/bge-small-en-v1.5"
+SELECTED_EMBEDDING_MODEL = EMBEDDING_MODEL_NAME_2
 
 _stemmer = PorterStemmer()
 
@@ -109,6 +117,16 @@ def llm_predict(case: dict, cfg: LLMConfig) -> bool | None:
         consumer_value=case["consumer"]["value"],
         location=case["consumer"]["location"],
         cfg=cfg,
+    )
+
+def embedding_predict(case: dict) -> bool:
+    return field_match_embedding(
+        producer_endpoint=case["producer"]["endpoint"],
+        producer_field=case["producer"]["field"],
+        consumer_endpoint=case["consumer"]["endpoint"],
+        consumer_field=case["consumer"]["field"],
+        model_name=SELECTED_EMBEDDING_MODEL,
+        threshold=EMBEDDING_THRESHOLD
     )
 
 
@@ -250,7 +268,7 @@ def print_report(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Benchmark E2E-Loader++ LCS against LLM field matching."
+        description="Benchmark E2E-Loader++ LCS, LLM, and Embedding."
     )
 
     mode = parser.add_mutually_exclusive_group()
@@ -264,63 +282,82 @@ def main():
         action="store_true",
         help="Run only the LLM.",
     )
+    mode.add_argument(
+        "--embedding-only",
+        action="store_true",
+        help="Run only the embedding model.",
+    )
 
     parser.add_argument(
         "--cases",
         default="generated_cases.json",
         help="Path to the generated test cases JSON file.",
     )
-    parser.add_argument("--model", default=LLM_MODEL)
-    parser.add_argument("--endpoint", default=LLM_ENDPOINT)
 
     args = parser.parse_args()
 
     with open(args.cases, "r", encoding="utf-8") as f:
         cases = json.load(f)
 
-    run_lcs = not args.llm_only
-    run_llm = not args.lcs_only
+    run_lcs = not (args.llm_only or args.embedding_only)
+    run_llm = not (args.lcs_only or args.embedding_only)
+    run_embedding = not (args.lcs_only or args.llm_only)
 
     cfg = LLMConfig(
-        provider="ollama",
-        endpoint=args.endpoint,
-        model=args.model,
+        provider=PROVIDER,
+        endpoint=LLM_ENDPOINT,
+        model=LLM_MODEL,
+        api_key=API_KEY,
         fallback_to_lcs=False,
         cache_enabled=False,
     )
 
+    if args.lcs_only:
+        mode_name = "LCS only"
+    elif args.llm_only:
+        mode_name = "LLM only"
+    elif args.embedding_only:
+        mode_name = "Embedding only"
+    else:
+        mode_name = "LCS + LLM + Embedding"
+
     print(f"Test cases : {len(cases)}")
-    print(
-        "Mode       : "
-        f"{'LCS only' if args.lcs_only else 'LLM only' if args.llm_only else 'LCS + LLM'}"
-    )
+    print(f"Mode       : {mode_name}")
 
     if run_llm:
         print(f"LLM model  : {cfg.model}")
         print(f"Endpoint   : {cfg.endpoint}")
+
+    if run_embedding:
+        print(f"Embedding  : {SELECTED_EMBEDDING_MODEL}")
 
     print()
 
     header = f"{'ID':<32} {'GT':<8}"
 
     if run_lcs:
-        header += f"{'LCS':<8} "
-
+        header += f"{'LCS':<10}"
     if run_llm:
-        header += f"{'LLM':<8} "
+        header += f"{'LLM':<10}"
+    if run_embedding:
+        header += f"{'EMBED':<10}"
 
     if run_lcs:
-        header += f"{'LCS_OK':<8} "
-
+        header += f"{'LCS_OK':<10}"
     if run_llm:
-        header += f"{'LLM_OK':<8}"
+        header += f"{'LLM_OK':<10}"
+    if run_embedding:
+        header += f"{'EMBED_OK':<10}"
 
     print(header)
     print("-" * len(header))
 
     lcs_predictions = []
     llm_predictions = []
+    embedding_predictions = []
+
     llm_failures = []
+    embedding_failures = []
 
     benchmark_start = time.perf_counter()
 
@@ -332,7 +369,7 @@ def main():
             lcs_pred = e2eloaderpp_predict(case)
             lcs_predictions.append(lcs_pred)
             lcs_ok = lcs_pred == gt
-            row += f"{str(lcs_pred):<8} "
+            row += f"{str(lcs_pred):<10}"
 
         if run_llm:
             try:
@@ -343,15 +380,28 @@ def main():
 
             llm_predictions.append(llm_pred)
             llm_ok = llm_pred == gt
-            row += f"{str(llm_pred):<8} "
+            row += f"{str(llm_pred):<10}"
+
+        if run_embedding:
+            try:
+                embedding_pred = embedding_predict(case)
+            except Exception as exc:
+                embedding_pred = None
+                embedding_failures.append((case["id"], str(exc)))
+
+            embedding_predictions.append(embedding_pred)
+            embedding_ok = embedding_pred == gt
+            row += f"{str(embedding_pred):<10}"
 
         if run_lcs:
-            row += f"{'OK' if lcs_ok else 'X':<8} "
-
+            row += f"{'OK' if lcs_ok else 'X':<10}"
         if run_llm:
-            row += f"{'OK' if llm_ok else 'X':<8}"
+            row += f"{'OK' if llm_ok else 'X':<10}"
+        if run_embedding:
+            row += f"{'OK' if embedding_ok else 'X':<10}"
 
         print(row)
+        print()
 
     elapsed = time.perf_counter() - benchmark_start
 
@@ -363,15 +413,26 @@ def main():
     if run_llm:
         print_report(f"LLM ({cfg.model})", cases, llm_predictions)
 
-    print(f"\nBenchmark time: {elapsed:.2f} seconds")
+    if run_embedding:
+        print_report(
+            f"Embedding ({SELECTED_EMBEDDING_MODEL})",
+            cases,
+            embedding_predictions,
+        )
+
+    print(f"\nTotal benchmark time: {elapsed:.2f} seconds")
 
     if cases:
         print(f"Average time per case: {elapsed / len(cases):.3f} seconds")
 
     if llm_failures:
         print(f"\nLLM request failures: {len(llm_failures)}")
-
         for case_id, error in llm_failures:
+            print(f"  - {case_id}: {error}")
+
+    if embedding_failures:
+        print(f"\nEmbedding failures: {len(embedding_failures)}")
+        for case_id, error in embedding_failures:
             print(f"  - {case_id}: {error}")
 
 
