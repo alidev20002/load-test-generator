@@ -92,8 +92,19 @@ def parse_dependency_answer(text: str | None) -> bool | None:
 # ---------------------------------------------------------------------
 
 @lru_cache(maxsize=16)
-def _ollama_client(endpoint: str, timeout: float) -> OllamaClient:
-    return OllamaClient(host=endpoint, timeout=timeout)
+def _ollama_client(
+    endpoint: str,
+    timeout: float,
+    api_key: str,
+) -> OllamaClient:
+    headers = {}
+    headers["Authorization"] = f"Bearer {api_key}"
+
+    return OllamaClient(
+        host=endpoint,
+        timeout=timeout,
+        headers=headers,
+    )
 
 
 @lru_cache(maxsize=16)
@@ -115,7 +126,11 @@ def _openai_client(
 
 
 def _query_ollama(prompt: str, cfg: LLMConfig) -> str | None:
-    response = _ollama_client(cfg.endpoint, cfg.timeout).chat(
+    response = _ollama_client(
+        endpoint=cfg.endpoint, 
+        timeout=cfg.timeout, 
+        api_key=cfg.api_key
+    ).chat(
         model=cfg.model,
         messages=[{"role": "system", "content": prompt}],
         options={"temperature": 0},
@@ -128,16 +143,9 @@ def _query_openai_compatible(
     prompt: str,
     cfg: LLMConfig,
 ) -> str | None:
-    from . import config as app_config
-
-    api_key = (
-        app_config.get_env("OPENAI_API_KEY")
-        or app_config.get_env("LLM_API_KEY")
-        or ""
-    )
 
     response = _openai_client(
-        cfg.endpoint, api_key, cfg.timeout
+        cfg.endpoint, cfg.api_key, cfg.timeout
     ).chat.completions.create(
         model=cfg.model,
         messages=[{"role": "system", "content": prompt}],
@@ -153,18 +161,14 @@ def _query_openai_compatible(
 
 def _query(
     prompt: str,
-    payload: dict,
     cfg: LLMConfig,
 ) -> bool | None:
     try:
         if cfg.provider == "ollama":
             raw = _query_ollama(prompt, cfg)
 
-        elif cfg.provider == "openai-compatible":
+        elif cfg.provider == "openai":
             raw = _query_openai_compatible(prompt, cfg)
-
-        elif cfg.provider == "stub":
-            return None
 
         else:
             raise ValueError(f"Unsupported LLM provider: {cfg.provider}")
@@ -200,16 +204,6 @@ def field_match(
     """Return True/False on a valid answer, otherwise None."""
     cfg = cfg or LLMConfig.from_env()
 
-    payload = {
-        "producer_endpoint": producer_endpoint,
-        "producer_field": producer_field,
-        "producer_value": producer_value,
-        "consumer_endpoint": consumer_endpoint,
-        "consumer_field": consumer_field,
-        "consumer_value": consumer_value,
-        "model": cfg.model,
-    }
-
     cache_key = (
         cfg.provider,
         cfg.endpoint,
@@ -230,7 +224,7 @@ def field_match(
         consumer_field=consumer_field,
     )
 
-    result = _query(prompt, payload, cfg)
+    result = _query(prompt, cfg)
 
     if result is not None and cfg.cache_enabled:
         _CACHE[cache_key] = result
