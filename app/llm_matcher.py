@@ -8,6 +8,7 @@ from ollama import Client as OllamaClient
 from openai import OpenAI
 
 from .prompts import LLM_PROMPTS
+from . import config as app_config
 
 
 # ---------------------------------------------------------------------
@@ -95,8 +96,10 @@ def parse_dependency_answer(text: str | None) -> bool | None:
 def _ollama_client(
     endpoint: str,
     timeout: float,
-    api_key: str,
 ) -> OllamaClient:
+
+    api_key = app_config.get_env("OPENAI_API_KEY")
+
     headers = {}
     headers["Authorization"] = f"Bearer {api_key}"
 
@@ -110,13 +113,14 @@ def _ollama_client(
 @lru_cache(maxsize=16)
 def _openai_client(
     endpoint: str,
-    api_key: str,
     timeout: float,
 ) -> OpenAI:
     base_url = endpoint.rstrip("/")
 
     if not base_url.endswith("/v1"):
         base_url += "/v1"
+
+    api_key = app_config.get_env("OPENAI_API_KEY")
 
     return OpenAI(
         base_url=base_url,
@@ -129,7 +133,6 @@ def _query_ollama(prompt: str, cfg: LLMConfig) -> str | None:
     response = _ollama_client(
         endpoint=cfg.endpoint, 
         timeout=cfg.timeout, 
-        api_key=cfg.api_key
     ).chat(
         model=cfg.model,
         messages=[{"role": "system", "content": prompt}],
@@ -145,7 +148,7 @@ def _query_openai_compatible(
 ) -> str | None:
 
     response = _openai_client(
-        cfg.endpoint, cfg.api_key, cfg.timeout
+        cfg.endpoint, cfg.timeout
     ).chat.completions.create(
         model=cfg.model,
         messages=[{"role": "system", "content": prompt}],
