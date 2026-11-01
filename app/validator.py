@@ -179,7 +179,7 @@ def _embedding_name_match(atomic: AtomicObject, father: StructuredObject | None,
                     lcs_fallback=None) -> bool:
     producer_endpoint = f"{producer_method} {from_url}".strip()
     consumer_endpoint = f"{consumer_method} {consumer_url}".strip()
-    res = _EMBEDDING.field_match_embedding(
+    res, score = _EMBEDDING.field_match_embedding(
         producer_endpoint=producer_endpoint,
         producer_field=_qualified_producer_name(atomic, father),
         producer_value=atomic.value,
@@ -187,10 +187,10 @@ def _embedding_name_match(atomic: AtomicObject, father: StructuredObject | None,
         consumer_field=to_name,
         consumer_value=value,
     )
-    if res is not None:
+    if res is not None and score > 0.8:
         return res
     
-    return False
+    return bool(lcs_fallback())
 
 def evaluate_header_atomic_dep(atomic: AtomicObject, header_name: str, header_value: str,
                                father: StructuredObject | None, from_url: str,
