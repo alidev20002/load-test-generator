@@ -12,11 +12,10 @@ MODEL_NAME_2 = "BAAI/bge-small-en-v1.5"
 
 
 @lru_cache(maxsize=4)
-def _load_model(model_name=MODEL_NAME_2):
+def _load_model(model_name):
     return SentenceTransformer(
         model_name,
         device="cpu",
-        local_files_only=True
     )
 
 BASE_URLS = [
@@ -97,7 +96,7 @@ def field_match_embedding(
     consumer_value: str = "",
     producer_value: str = "",
     model_name: str = MODEL_NAME_2,
-) -> bool:
+) -> tuple[bool, float]:
     producer_name = _normalize(producer_field)
     consumer_name = _normalize(consumer_field)
 
@@ -129,4 +128,4 @@ def field_match_embedding(
 
     print(f"context score between: {texts[0]} and {texts[1]} is {context_score}")
 
-    return context_score >= THRESHOLD
+    return context_score >= THRESHOLD, context_score
