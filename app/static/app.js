@@ -965,6 +965,8 @@ $("#ctrlZoomOut") && ($("#ctrlZoomOut").onclick = () => zoomStep(0.8));
 $("#nodeSearch").oninput = (e) => { state.nodeFilter = e.target.value.toLowerCase(); render(); };
 $("#edgeTypeFilter").onchange = () => render();
 $("#labelsBtn").onclick = () => { state.showLabels = !state.showLabels; $("#labelsBtn").classList.toggle("active", state.showLabels); render(); };
+$("#downloadImgBtn") && ($("#downloadImgBtn").onclick = () => downloadGraphImage("png"));
+$("#ctrlDownloadImg") && ($("#ctrlDownloadImg").onclick = () => downloadGraphImage("png"));
 
 // Window resize listener to keep canvas readable
 window.addEventListener("resize", () => {
@@ -1246,12 +1248,204 @@ $("#describeBtn").onclick = async () => {
   $("#describeOut").textContent = r.ok ? (await r.json()).description : "Error: " + (await r.text()).slice(0, 300);
 };
 
+
+/* ---------- export graph as PNG image ---------- */
+function triggerDownload(href, filename) {
+  const a = document.createElement("a");
+  a.style.display = "none";
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    try {
+      document.body.removeChild(a);
+      if (href.startsWith("blob:")) URL.revokeObjectURL(href);
+    } catch {}
+  }, 1000);
+}
+
+function downloadGraphImage(format = "png") {
+  if (!state.graph || !state.graph.nodes || !state.graph.nodes.length) {
+    const statsEl = $("#graphStats");
+    if (statsEl) {
+      const prev = statsEl.textContent;
+      statsEl.textContent = "⚠️ Please build or import a graph first!";
+      setTimeout(() => { statsEl.textContent = prev; }, 3000);
+    }
+    alert("Please build or import a dependency graph first in Step 1.");
+    return;
+  }
+
+  const ids = Object.keys(state.pos);
+  if (!ids.length) {
+    alert("No nodes positioned in graph yet. Click Auto-layout first.");
+    return;
+  }
+
+  const btn = $("#downloadImgBtn");
+  const origText = btn ? btn.innerHTML : "";
+  if (btn) btn.textContent = "⏳ Saving...";
+
+  function restoreBtn() {
+    if (btn) setTimeout(() => { btn.innerHTML = origText; }, 1200);
+  }
+
+  try {
+    // 1. Calculate full graph bounding box across all nodes
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    ids.forEach((id) => {
+      const p = state.pos[id];
+      if (!p) return;
+      x0 = Math.min(x0, p.x);
+      y0 = Math.min(y0, p.y - 70);
+      x1 = Math.max(x1, p.x + NW);
+      y1 = Math.max(y1, p.y + NH + 30);
+    });
+
+    const pad = 60;
+    x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+    const w = Math.ceil(x1 - x0);
+    const h = Math.ceil(y1 - y0);
+
+    const originalSvg = $("#graphSvg");
+    if (!originalSvg) {
+      restoreBtn();
+      return;
+    }
+
+    const isDark = document.documentElement.dataset.theme === "dark";
+    const bgColor = isDark ? "#141020" : "#fbfcfe";
+    const nodeFill = isDark ? "#1e1832" : "#ffffff";
+    const nodeStroke = isDark ? "#5a4d8f" : "#b9c6d9";
+
+    // Clone the full SVG so defs, markers, and nodes are preserved
+    const clone = originalSvg.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", String(w));
+    clone.setAttribute("height", String(h));
+    clone.setAttribute("viewBox", `${x0} ${y0} ${w} ${h}`);
+
+    // Remove interactive hit areas and active highlights
+    clone.querySelectorAll(".edge-hit").forEach((el) => el.remove());
+    clone.querySelectorAll(".highlighted, .producer, .consumer, .focus").forEach((elem) => {
+      elem.classList.remove("highlighted", "producer", "consumer", "focus");
+    });
+    const vpClone = clone.querySelector("#viewport");
+    if (vpClone) {
+      vpClone.classList.remove("graph-dimmed");
+      vpClone.setAttribute("transform", "translate(0,0) scale(1)");
+    }
+
+    // Explicitly inline node fill & stroke for standalone rendering
+    clone.querySelectorAll("rect.body").forEach((rect) => {
+      rect.setAttribute("fill", nodeFill);
+      rect.setAttribute("stroke", nodeStroke);
+      rect.setAttribute("stroke-width", "1.3");
+    });
+    clone.querySelectorAll(".node-card.csv rect.body").forEach((rect) => {
+      rect.setAttribute("stroke-dasharray", "6 4");
+      rect.setAttribute("stroke", "#b45309");
+    });
+
+    // Add embedded style
+    const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    styleEl.textContent = `
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif; }
+      .edge { fill: none; }
+      .node-card { cursor: default; }
+    `;
+    clone.insertBefore(styleEl, clone.firstChild);
+
+    // Add theme-matching solid background
+    const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bgRect.setAttribute("x", String(x0));
+    bgRect.setAttribute("y", String(y0));
+    bgRect.setAttribute("width", String(w));
+    bgRect.setAttribute("height", String(h));
+    bgRect.setAttribute("fill", bgColor);
+    if (vpClone) {
+      vpClone.insertBefore(bgRect, vpClone.firstChild);
+    } else {
+      clone.insertBefore(bgRect, clone.firstChild);
+    }
+
+    const xmlStr = new XMLSerializer().serializeToString(clone);
+
+    function fallbackSvgDownload() {
+      const blob = new Blob([xmlStr], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(blob);
+      const svgName = (state.harFile?.name || "dependency-graph").replace(/\.[^.]+$/, "") + "-graph.svg";
+      triggerDownload(svgUrl, svgName);
+      restoreBtn();
+    }
+
+    if (format === "svg") {
+      fallbackSvgDownload();
+      return;
+    }
+
+    // Render to high-res 2x canvas for crisp PNG
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      fallbackSvgDownload();
+      return;
+    }
+
+    const img = new Image();
+    const pngName = (state.harFile?.name || "dependency-graph").replace(/\.[^.]+$/, "") + "-graph.png";
+
+    // Use data: URI for robust inline rasterization
+    const svgBase64 = btoa(unescape(encodeURIComponent(xmlStr)));
+    const dataUri = "data:image/svg+xml;base64," + svgBase64;
+
+    img.onload = () => {
+      try {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        if (canvas.toBlob) {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const blobUrl = URL.createObjectURL(blob);
+              triggerDownload(blobUrl, pngName);
+            } else {
+              const pngData = canvas.toDataURL("image/png");
+              triggerDownload(pngData, pngName);
+            }
+            restoreBtn();
+          }, "image/png");
+        } else {
+          const pngData = canvas.toDataURL("image/png");
+          triggerDownload(pngData, pngName);
+          restoreBtn();
+        }
+      } catch (err) {
+        console.warn("Canvas export failed, falling back to SVG:", err);
+        fallbackSvgDownload();
+      }
+    };
+
+    img.onerror = (err) => {
+      console.warn("SVG image load failed, falling back to SVG file:", err);
+      fallbackSvgDownload();
+    };
+
+    img.src = dataUri;
+  } catch (e) {
+    console.error("downloadGraphImage error:", e);
+    alert("Error generating image: " + (e.message || e));
+    restoreBtn();
+  }
+}
 /* ---------- export / import graph ---------- */
 $("#exportGraphBtn").onclick = () => {
   if (!state.graph) return alert("No graph to export");
   const blob = new Blob([JSON.stringify(state.graph, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "graph.json"; a.click();
+  triggerDownload(URL.createObjectURL(blob), "graph.json");
 };
 $("#importGraphFile").onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
@@ -1303,10 +1497,8 @@ async function buildJmx(auto = false) {
 }
 $("#downloadJmxBtn").onclick = () => {
   if (!state.jmxBlob) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(state.jmxBlob);
-  a.download = (state.harFile?.name || "test").replace(/\.[^.]+$/, "") + ".jmx";
-  a.click();
+  const name = (state.harFile?.name || "test").replace(/\.[^.]+$/, "") + ".jmx";
+  triggerDownload(URL.createObjectURL(state.jmxBlob), name);
 };
 
 (function initTheme() {
@@ -1317,3 +1509,14 @@ $("#downloadJmxBtn").onclick = () => {
 })();
 refreshAddEdgeNodeOptions();
 checkHealth();
+
+
+// Global event delegation for download image buttons
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("#downloadImgBtn, #ctrlDownloadImg");
+  if (btn) {
+    e.preventDefault();
+    e.stopPropagation();
+    downloadGraphImage("png");
+  }
+});
