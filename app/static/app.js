@@ -1250,6 +1250,8 @@ $("#describeBtn").onclick = async () => {
 
 
 /* ---------- export graph as PNG image ---------- */
+let _downloading = false;  // global hard lock across all invocations
+
 function triggerDownload(href, filename) {
   const a = document.createElement("a");
   a.style.display = "none";
@@ -1257,15 +1259,20 @@ function triggerDownload(href, filename) {
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  setTimeout(() => {
-    try {
-      document.body.removeChild(a);
-      if (href.startsWith("blob:")) URL.revokeObjectURL(href);
-    } catch {}
-  }, 1000);
+  // Remove immediately so the same anchor can never fire twice
+  document.body.removeChild(a);
+  if (href.startsWith("blob:")) {
+    setTimeout(() => { try { URL.revokeObjectURL(href); } catch {} }, 1000);
+  }
 }
 
 function downloadGraphImage(format = "png") {
+  // Hard guard: block any concurrent or rapid re-entry
+  if (_downloading) return;
+  _downloading = true;
+
+  const finish = () => { _downloading = false; };
+
   if (!state.graph || !state.graph.nodes || !state.graph.nodes.length) {
     const statsEl = $("#graphStats");
     if (statsEl) {
@@ -1274,22 +1281,23 @@ function downloadGraphImage(format = "png") {
       setTimeout(() => { statsEl.textContent = prev; }, 3000);
     }
     alert("Please build or import a dependency graph first in Step 1.");
+    finish();
     return;
   }
 
   const ids = Object.keys(state.pos);
   if (!ids.length) {
     alert("No nodes positioned in graph yet. Click Auto-layout first.");
+    finish();
     return;
   }
 
-  const btn = $("#downloadImgBtn");
-  const origText = btn ? btn.innerHTML : "";
-  if (btn) btn.textContent = "⏳ Saving...";
-
-  function restoreBtn() {
-    if (btn) setTimeout(() => { btn.innerHTML = origText; }, 1200);
-  }
+  let downloaded = false;
+  const doDownload = (href, filename) => {
+    if (downloaded) return;
+    downloaded = true;
+    triggerDownload(href, filename);
+  };
 
   try {
     // 1. Calculate full graph bounding box across all nodes
@@ -1309,10 +1317,7 @@ function downloadGraphImage(format = "png") {
     const h = Math.ceil(y1 - y0);
 
     const originalSvg = $("#graphSvg");
-    if (!originalSvg) {
-      restoreBtn();
-      return;
-    }
+    if (!originalSvg) { finish(); return; }
 
     const isDark = document.documentElement.dataset.theme === "dark";
     const bgColor = isDark ? "#141020" : "#fbfcfe";
@@ -1338,7 +1343,6 @@ function downloadGraphImage(format = "png") {
       vpClone.setAttribute("transform", "translate(0,0) scale(1)");
     }
 
-    // Explicitly inline node fill & stroke for standalone rendering
     clone.querySelectorAll("rect.body").forEach((rect) => {
       rect.setAttribute("fill", nodeFill);
       rect.setAttribute("stroke", nodeStroke);
@@ -1349,7 +1353,6 @@ function downloadGraphImage(format = "png") {
       rect.setAttribute("stroke", "#b45309");
     });
 
-    // Add embedded style
     const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
     styleEl.textContent = `
       text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif; }
@@ -1358,7 +1361,6 @@ function downloadGraphImage(format = "png") {
     `;
     clone.insertBefore(styleEl, clone.firstChild);
 
-    // Add theme-matching solid background
     const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     bgRect.setAttribute("x", String(x0));
     bgRect.setAttribute("y", String(y0));
@@ -1372,17 +1374,22 @@ function downloadGraphImage(format = "png") {
     }
 
     const xmlStr = new XMLSerializer().serializeToString(clone);
+    const baseName = (state.harFile?.name || "dependency-graph").replace(/\.[^.]+$/, "") + "-graph";
 
-    function fallbackSvgDownload() {
-      const blob = new Blob([xmlStr], { type: "image/svg+xml;charset=utf-8" });
-      const svgUrl = URL.createObjectURL(blob);
-      const svgName = (state.harFile?.name || "dependency-graph").replace(/\.[^.]+$/, "") + "-graph.svg";
-      triggerDownload(svgUrl, svgName);
-      restoreBtn();
-    }
+    const fallbackSvg = () => {
+      try {
+        const blob = new Blob([xmlStr], { type: "image/svg+xml;charset=utf-8" });
+        const svgUrl = URL.createObjectURL(blob);
+        doDownload(svgUrl, baseName + ".svg");
+      } catch (e) {
+        console.error("SVG fallback error:", e);
+      } finally {
+        finish();
+      }
+    };
 
     if (format === "svg") {
-      fallbackSvgDownload();
+      fallbackSvg();
       return;
     }
 
@@ -1392,53 +1399,70 @@ function downloadGraphImage(format = "png") {
     canvas.width = w * scale;
     canvas.height = h * scale;
     const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      fallbackSvgDownload();
-      return;
-    }
+    if (!ctx) { fallbackSvg(); return; }
 
     const img = new Image();
-    const pngName = (state.harFile?.name || "dependency-graph").replace(/\.[^.]+$/, "") + "-graph.png";
+    const pngName = baseName + ".png";
 
-    // Use data: URI for robust inline rasterization
     const svgBase64 = btoa(unescape(encodeURIComponent(xmlStr)));
     const dataUri = "data:image/svg+xml;base64," + svgBase64;
 
+    // Single-shot handler: whichever fires first wins, the other is a no-op
+    let imgHandled = false;
+    const settle = (blobOrUrl, filename) => {
+      if (imgHandled) return;
+      imgHandled = true;
+      doDownload(blobOrUrl, filename);
+      finish();
+    };
+
     img.onload = () => {
+      if (imgHandled) return;
       try {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         if (canvas.toBlob) {
           canvas.toBlob((blob) => {
-            if (blob) {
-              const blobUrl = URL.createObjectURL(blob);
-              triggerDownload(blobUrl, pngName);
-            } else {
-              const pngData = canvas.toDataURL("image/png");
-              triggerDownload(pngData, pngName);
+            try {
+              if (blob) {
+                settle(URL.createObjectURL(blob), pngName);
+              } else {
+                settle(canvas.toDataURL("image/png"), pngName);
+              }
+            } catch (blobErr) {
+              console.warn("toBlob error, fallback to SVG:", blobErr);
+              imgHandled = false; // allow fallback path
+              fallbackSvg();
             }
-            restoreBtn();
           }, "image/png");
         } else {
-          const pngData = canvas.toDataURL("image/png");
-          triggerDownload(pngData, pngName);
-          restoreBtn();
+          try {
+            settle(canvas.toDataURL("image/png"), pngName);
+          } catch (dataUrlErr) {
+            console.warn("toDataURL error, fallback to SVG:", dataUrlErr);
+            imgHandled = false;
+            fallbackSvg();
+          }
         }
-      } catch (err) {
-        console.warn("Canvas export failed, falling back to SVG:", err);
-        fallbackSvgDownload();
+      } catch (drawErr) {
+        console.warn("Canvas draw failed, falling back to SVG:", drawErr);
+        imgHandled = false;
+        fallbackSvg();
       }
     };
 
     img.onerror = (err) => {
-      console.warn("SVG image load failed, falling back to SVG file:", err);
-      fallbackSvgDownload();
+      if (imgHandled) return;
+      imgHandled = true;
+      console.warn("SVG image rasterization error, falling back to SVG:", err);
+      fallbackSvg();
+      finish();
     };
 
     img.src = dataUri;
   } catch (e) {
     console.error("downloadGraphImage error:", e);
     alert("Error generating image: " + (e.message || e));
-    restoreBtn();
+    finish();
   }
 }
 /* ---------- export / import graph ---------- */
@@ -1511,12 +1535,4 @@ refreshAddEdgeNodeOptions();
 checkHealth();
 
 
-// Global event delegation for download image buttons
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("#downloadImgBtn, #ctrlDownloadImg");
-  if (btn) {
-    e.preventDefault();
-    e.stopPropagation();
-    downloadGraphImage("png");
-  }
-});
+
