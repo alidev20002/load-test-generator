@@ -189,6 +189,8 @@ def _embedding_name_match(atomic: AtomicObject, father: StructuredObject | None,
     )
     if res is not None and score > 0.8:
         return res
+
+    print("Embedding fallbacked to lcs")
     
     return bool(lcs_fallback())
 

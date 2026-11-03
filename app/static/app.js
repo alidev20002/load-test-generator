@@ -148,7 +148,7 @@ $("#useLlm").onchange = (e) => {
 
 $("#useEmbedding").onchange = (e) => {
   state.useEmbedding = e.target.checked;
-  $("#modePill").textContent = "Mode: " + (state.useEmbedding ? "LLM" : "LCS");
+  $("#modePill").textContent = "Mode: " + (state.useEmbedding ? "EMBEDDING" : "LCS");
 };
 
 /* ---------- build graph ---------- */

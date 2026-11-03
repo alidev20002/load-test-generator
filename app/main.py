@@ -202,7 +202,12 @@ async def graphs_build(
     entries = _entries_from_bytes(data)
     g, _, _ = build_graph("", entries=entries, use_llm=use_llm, use_embedding=use_embedding,
                           llm_config=_resolve_llm(use_llm) if use_llm else None)
-    mode = "LLM" if use_llm else "LCS"
+    if use_llm:
+        mode = "LLM"
+    elif use_embedding:
+        mode = "EMBEDDING"
+    else:
+        mode = "LCS"
     out = _graph_payload(g)
     out["mode"] = mode
     return out
