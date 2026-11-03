@@ -1,15 +1,9 @@
 {
-  "env": {
-    "OPENAI_API_KEY": "",
-    "LLM_API_KEY": "",
-    "OLLAMA_HOST": "http://185.239.2.48:11434/"
-  },
-  "llm": {
-    "provider": "openai",
-    "endpoint": "http://185.239.2.48:11434/",
-    "model": "gemma3:4b",
-    "timeout": 30,
-    "fallback_to_lcs": true,
-    "cache_enabled": true
-  }
+  "llm_provider": "openai",
+  "llm_endpoint": "http://185.239.2.48:11434/",
+  "llm_apikey": "",
+  "model": "gemma3:4b",
+  "timeout": 30.0,
+  "fallback_to_lcs": true,
+  "cache_enabled": true
 }

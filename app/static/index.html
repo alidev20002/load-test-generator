@@ -208,15 +208,14 @@
 <div id="configModal" class="modal hidden">
   <div class="modal-card glass wide">
     <div class="m-head"><h3>Runtime config</h3><button class="icon-btn" id="configX" data-tip-below="Close">✕</button></div>
-    <div class="cfg-sec">Environment</div>
+    <div class="cfg-sec">App Configuration</div>
     <div class="frow2">
-      <div><label>OPENAI_API_KEY <i class="info" data-tip="Token used when the LLM provider is openai-compatible.">?</i></label><input id="cfg_openai" class="input" type="password" autocomplete="off" /></div>
-      <div><label>OLLAMA_HOST <i class="info" data-tip="Ollama server address, also exported as an environment variable.">?</i></label><input id="cfg_ollama" class="input" /></div>
-    </div>
-    <div class="cfg-sec">LLM matcher</div>
-    <div class="frow2">
-      <div><label>provider <i class="info" data-tip="LLM backend: ollama or openai-compatible">?</i></label><select id="cfg_provider" class="input"><option>ollama</option><option>openai</option></select></div>
+      <div><label>provider <i class="info" data-tip="LLM backend: openai or ollama">?</i></label><select id="cfg_provider" class="input"><option>openai</option><option>ollama</option></select></div>
       <div><label>endpoint <i class="info" data-tip="Base URL of the LLM service.">?</i></label><input id="cfg_endpoint" class="input" /></div>
+    </div>
+    <div class="frow2">
+      <div><label>API Key <i class="info" data-tip="Authentication token for the LLM service.">?</i></label><input id="cfg_apikey" class="input" type="password" autocomplete="off" /></div>
+      <div><label>model <i class="info" data-tip="Model name, e.g. gemma3:4b.">?</i></label><input id="cfg_model" class="input" /></div>
     </div>
     <div class="frow2">
       <div><label>model <i class="info" data-tip="Model name, e.g. qwen2.5-coder:7b.">?</i></label><input id="cfg_model" class="input" /></div>

@@ -1,86 +1,74 @@
-SUPPORT_TYPE = ("string", "number", "array", "object", "boolean", "integer")
+"""Generate JSON schema structures from JSON-serializable payloads."""
+
+from __future__ import annotations
+
+from typing import Any
+
+VALID_SCHEMA_TYPES = {"string", "number", "array", "object", "boolean", "integer"}
 
 
-def _is_js_falsy(value):
-    if value is None:
-        return True
-    if value is False:
-        return True
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return value == 0
-    if isinstance(value, str):
-        return value == ""
-    return False
-
-
-def _js_typeof(value):
-    if isinstance(value, str):
+def _infer_primitive_type(val: Any) -> str:
+    """Infer the JSON schema primitive type for a given scalar value."""
+    if val is None or val is False or val == "" or val == 0:
         return "string"
-    if isinstance(value, bool):
+    if isinstance(val, str):
+        return val if val in VALID_SCHEMA_TYPES else "string"
+    if isinstance(val, bool):
         return "boolean"
-    if isinstance(value, (int, float)):
+    if isinstance(val, (int, float)):
         return "number"
     return "object"
 
 
-def get_type(value):
-    if _is_js_falsy(value):
-        value = "string"
-    if value in SUPPORT_TYPE:
-        return value
-    return _js_typeof(value)
+def is_schema_node(obj: Any) -> bool:
+    """Check if a dictionary already represents a JSON schema definition."""
+    return isinstance(obj, dict) and obj.get("type") in VALID_SCHEMA_TYPES
 
 
-def is_schema(obj):
-    if not isinstance(obj, dict):
-        return False
-    return obj.get("type") in SUPPORT_TYPE
-
-
-def handle_schema(json_obj, schema):
-    schema.update(json_obj)
-    if schema.get("type") == "object":
-        schema.pop("properties", None)
-        parse(json_obj.get("properties"), schema)
-    if schema.get("type") == "array":
-        schema.pop("items", None)
-        schema["items"] = {}
-        parse(json_obj.get("items"), schema["items"])
-
-
-def handle_array(arr, schema):
-    schema["type"] = "array"
-    props = schema["items"] = {}
-    parse(arr[0] if len(arr) > 0 else None, props)
-
-
-def handle_object(json_obj, schema):
-    if is_schema(json_obj):
-        return handle_schema(json_obj, schema)
-    schema["type"] = "object"
-    schema["required"] = []
-    props = schema["properties"] = {}
-    for original_key in list(json_obj.keys()):
-        item = json_obj[original_key]
-        if original_key and original_key[0] == "*":
-            key = original_key[1:]
-            cur_schema = props[key] = {}
-            schema["required"].append(key)
-        else:
-            cur_schema = props[original_key] = {}
-        parse(item, cur_schema)
-
-
-def parse(data, schema):
+def _parse_into_schema(data: Any, schema: dict[str, Any]) -> None:
+    """Recursively parse Python data into a JSON schema dictionary."""
     if isinstance(data, list):
-        handle_array(data, schema)
+        schema["type"] = "array"
+        items_schema: dict[str, Any] = {}
+        schema["items"] = items_schema
+        _parse_into_schema(data[0] if data else None, items_schema)
+
     elif isinstance(data, dict):
-        handle_object(data, schema)
+        if is_schema_node(data):
+            schema.update(data)
+            if schema.get("type") == "object":
+                schema.pop("properties", None)
+                _parse_into_schema(data.get("properties"), schema)
+            elif schema.get("type") == "array":
+                schema.pop("items", None)
+                items_schema = {}
+                schema["items"] = items_schema
+                _parse_into_schema(data.get("items"), items_schema)
+            return
+
+        schema["type"] = "object"
+        required_keys: list[str] = []
+        schema["required"] = required_keys
+        properties: dict[str, Any] = {}
+        schema["properties"] = properties
+
+        for raw_key, value in data.items():
+            if str(raw_key).startswith("*"):
+                key = str(raw_key)[1:]
+                required_keys.append(key)
+            else:
+                key = str(raw_key)
+
+            child_schema: dict[str, Any] = {}
+            properties[key] = child_schema
+            _parse_into_schema(value, child_schema)
+
     else:
-        schema["type"] = get_type(data)
+        schema["type"] = _infer_primitive_type(data)
 
 
-def generate_schema(payload):
-    schema = {}
-    parse(payload, schema)
+def generate_schema(payload: Any) -> dict[str, Any]:
+    """Generate a canonical JSON schema structure for any payload object."""
+    schema: dict[str, Any] = {}
+    _parse_into_schema(payload, schema)
     return schema

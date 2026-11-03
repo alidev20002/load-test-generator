@@ -72,25 +72,25 @@ $("#configBtn").onclick = async () => {
   try {
     const r = await fetch("/config");
     const c = await r.json();
-    $("#cfg_openai").value = c.env?.OPENAI_API_KEY || "";
-    $("#cfg_ollama").value = c.env?.OLLAMA_HOST || "";
-    $("#cfg_provider").value = c.llm?.provider || "ollama";
-    $("#cfg_endpoint").value = c.llm?.endpoint || "";
-    $("#cfg_model").value = c.llm?.model || "";
-    $("#cfg_timeout").value = c.llm?.timeout ?? 30;
-    $("#cfg_fallback").checked = !!c.llm?.fallback_to_lcs;
-    $("#cfg_cache").checked = !!c.llm?.cache_enabled;
+    $("#cfg_provider").value = c.llm_provider || "openai";
+    $("#cfg_endpoint").value = c.llm_endpoint || "";
+    $("#cfg_apikey").value = c.llm_apikey || "";
+    $("#cfg_model").value = c.model || "";
+    $("#cfg_timeout").value = c.timeout ?? 30;
+    $("#cfg_fallback").checked = !!c.fallback_to_lcs;
+    $("#cfg_cache").checked = !!c.cache_enabled;
   } catch (e) { $("#configStatus").textContent = "Failed to load config"; }
 };
 $("#configCancel").onclick = $("#configX").onclick = () => $("#configModal").classList.add("hidden");
 $("#configSave").onclick = async () => {
   const body = {
-    env: { OPENAI_API_KEY: $("#cfg_openai").value, OLLAMA_HOST: $("#cfg_ollama").value },
-    llm: {
-      provider: $("#cfg_provider").value, endpoint: $("#cfg_endpoint").value,
-      model: $("#cfg_model").value, timeout: Number($("#cfg_timeout").value),
-      fallback_to_lcs: $("#cfg_fallback").checked, cache_enabled: $("#cfg_cache").checked,
-    },
+    llm_provider: $("#cfg_provider").value,
+    llm_endpoint: $("#cfg_endpoint").value,
+    llm_apikey: $("#cfg_apikey").value,
+    model: $("#cfg_model").value,
+    timeout: Number($("#cfg_timeout").value),
+    fallback_to_lcs: $("#cfg_fallback").checked,
+    cache_enabled: $("#cfg_cache").checked,
   };
   const r = await fetch("/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (r.ok) { $("#configStatus").className = "status ok"; $("#configStatus").textContent = "Saved ✓"; }

@@ -1,249 +1,364 @@
-"""Dependency detectors. Port of Services/Dependencies/{Url,Header,QueryParameter,
-Cookie,Body}Dependency.java. Shared recursion replaces 5 copies of the walker."""
+"""Dependency detectors for identifying correlations across URLs, headers, query parameters, cookies, and payloads."""
+
 from __future__ import annotations
+
 import json
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlparse
-from .graph import DependencyGraph, MyNode, make_edge
-from .response_model import AtomicObject, StructuredObject, ResponseUnstructured
-from . import validator as V
+
 from . import schema_client
+from . import validator as V
+from .graph import DependencyGraph, MyNode, make_edge
+from .har_model import Cookie
+from .response_model import AtomicObject, ResponseUnstructured, StructuredObject
 
-BLACKLIST_HEADERS = {"sec-ch-ua", "sec-ch-ua-platform", "Accept-Language", "User-Agent",
-                     "sec-ch-ua-mobile", "baggage", "sentry-trace"}
+BLACKLIST_HEADERS = {
+    "sec-ch-ua",
+    "sec-ch-ua-platform",
+    "Accept-Language",
+    "User-Agent",
+    "sec-ch-ua-mobile",
+    "baggage",
+    "sentry-trace",
+}
 
 
-def _children(resp) -> list:
-    if isinstance(resp, ResponseUnstructured):
-        return resp.objects
-    if isinstance(resp, StructuredObject):
+def _get_node_children(resp: Any) -> list[Any]:
+    if isinstance(resp, (ResponseUnstructured, StructuredObject)):
         return resp.objects
     return []
 
 
-def _walk_atomic(resp, fn) -> None:
-    """DFS over response tree calling fn(atomic, father) for each AtomicObject."""
-    def rec(node, father):
-        for o in _children(node):
-            if isinstance(o, AtomicObject):
-                fn(o, father if isinstance(father, StructuredObject) else None)
-            elif isinstance(o, StructuredObject):
-                rec(o, o)
-    rec(resp, resp if isinstance(resp, StructuredObject) else None)
+def _walk_atomic(resp: Any, callback: Callable[[AtomicObject, StructuredObject | None], None]) -> None:
+    """Depth-first search over response structure, invoking callback for each AtomicObject."""
+    def _recurse(node: Any, parent_structured: StructuredObject | None) -> None:
+        for item in _get_node_children(node):
+            if isinstance(item, AtomicObject):
+                callback(item, parent_structured)
+            elif isinstance(item, StructuredObject):
+                _recurse(item, item)
+
+    _recurse(resp, resp if isinstance(resp, StructuredObject) else None)
 
 
-def check_url(responses: list, req_idx: int, graph: DependencyGraph,
-              to: MyNode, first: int) -> None:
-    segs = [s for s in urlparse(to.request.url).path.split("/") if s != ""]
-    # Java splits on "/" keeping leading empty; iterate i>=1 with possible_name=segs[i-1]
-    raw = urlparse(to.request.url).path.split("/")
-    for i in range(1, len(raw)):
-        sub, possible = raw[i], raw[i - 1]
-        if not sub:
+def check_url(
+    responses: list[Any],
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    first: int,
+) -> None:
+    """Detect correlations inside URL path segments."""
+    path_segments = urlparse(to_node.request.url).path.split("/")
+    for i in range(1, len(path_segments)):
+        segment, possible_name = path_segments[i], path_segments[i - 1]
+        if not segment:
             continue
+
         for ri in range(first, req_idx):
-            frm = graph.get_node_by_index(ri)
-            if frm is None:
+            source_node = graph.get_node_by_index(ri)
+            if source_node is None:
                 continue
-            def fn(atomic: AtomicObject, father, _sub=sub, _poss=possible,
-                   _frm=frm, _ri=ri):
-                if _sub == atomic.value and V.evaluate_url_atomic_dep(
-                        atomic, _frm.request.url, father, _poss,
-                        consumer_url=to.request.url,
-                        producer_method=_frm.request.method,
-                        consumer_method=to.request.method):
-                    graph.edges.append(make_edge("url", _frm, to, atomic, _ri, req_idx,
-                                                 subPath=_sub))
-            _walk_atomic(responses[ri], fn)
+
+            def evaluate_match(atomic: AtomicObject, parent: StructuredObject | None) -> None:
+                if segment == atomic.value and V.evaluate_url_atomic_dep(
+                    atomic,
+                    source_node.request.url,
+                    parent,
+                    possible_name,
+                    consumer_url=to_node.request.url,
+                    producer_method=source_node.request.method,
+                    consumer_method=to_node.request.method,
+                ):
+                    graph.edges.append(
+                        make_edge("url", source_node, to_node, atomic, ri, req_idx, subPath=segment)
+                    )
+
+            _walk_atomic(responses[ri], evaluate_match)
 
 
-def check_header(responses: list, req_idx: int, graph: DependencyGraph,
-                 to: MyNode, first: int) -> None:
-    for h in to.request.headers:
-        if h.name in BLACKLIST_HEADERS or (h.name or "").lower() in ("cookie", "set-cookie"):
-            # Cookie/Set-Cookie belong to the cookie detector; keeping them
-            # here would create duplicate header-type edges for the same value.
+def check_header(
+    responses: list[Any],
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    first: int,
+) -> None:
+    """Detect correlations inside HTTP request headers."""
+    for header in to_node.request.headers:
+        header_name_lower = (header.name or "").lower()
+        if header.name in BLACKLIST_HEADERS or header_name_lower in ("cookie", "set-cookie"):
             continue
+
         for ri in range(first, req_idx):
-            frm = graph.get_node_by_index(ri)
-            if frm is None:
+            source_node = graph.get_node_by_index(ri)
+            if source_node is None:
                 continue
-            def fn(atomic: AtomicObject, father, _h=h, _frm=frm, _ri=ri):
-                if V.evaluate_header_atomic_dep(atomic, _h.name, _h.value, father,
-                                                _frm.request.url,
-                                                consumer_url=to.request.url,
-                                                producer_method=_frm.request.method,
-                                                consumer_method=to.request.method):
-                    graph.edges.append(make_edge("header", _frm, to, atomic, _ri, req_idx,
-                                                 header_name=_h.name))
-            _walk_atomic(responses[ri], fn)
+
+            def evaluate_match(atomic: AtomicObject, parent: StructuredObject | None) -> None:
+                if V.evaluate_header_atomic_dep(
+                    atomic,
+                    header.name,
+                    header.value,
+                    parent,
+                    source_node.request.url,
+                    consumer_url=to_node.request.url,
+                    producer_method=source_node.request.method,
+                    consumer_method=to_node.request.method,
+                ):
+                    graph.edges.append(
+                        make_edge("header", source_node, to_node, atomic, ri, req_idx, header_name=header.name)
+                    )
+
+            _walk_atomic(responses[ri], evaluate_match)
 
 
-def check_query(responses: list, req_idx: int, graph: DependencyGraph,
-                to: MyNode, first: int) -> None:
-    for q in to.request.queryParams:
+def check_query(
+    responses: list[Any],
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    first: int,
+) -> None:
+    """Detect correlations inside URL query parameters."""
+    for qparam in to_node.request.queryParams:
         for ri in range(first, req_idx):
-            frm = graph.get_node_by_index(ri)
-            if frm is None:
+            source_node = graph.get_node_by_index(ri)
+            if source_node is None:
                 continue
-            def fn(atomic: AtomicObject, father, _q=q, _frm=frm, _ri=ri):
-                if V.general_atomic_comparison(atomic, _q.value, _q.name, father,
-                                               _frm.request.url,
-                                               consumer_url=to.request.url,
-                                               location="queryparam",
-                                               producer_method=_frm.request.method,
-                                               consumer_method=to.request.method):
-                    graph.edges.append(make_edge("queryparam", _frm, to, atomic, _ri,
-                                                 req_idx, query_param_name=_q.name))
-            _walk_atomic(responses[ri], fn)
+
+            def evaluate_match(atomic: AtomicObject, parent: StructuredObject | None) -> None:
+                if V.general_atomic_comparison(
+                    atomic,
+                    qparam.value,
+                    qparam.name,
+                    parent,
+                    source_node.request.url,
+                    consumer_url=to_node.request.url,
+                    location="queryparam",
+                    producer_method=source_node.request.method,
+                    consumer_method=to_node.request.method,
+                ):
+                    graph.edges.append(
+                        make_edge("queryparam", source_node, to_node, atomic, ri, req_idx, query_param_name=qparam.name)
+                    )
+
+            _walk_atomic(responses[ri], evaluate_match)
 
 
-def check_cookie(responses: list, req_idx: int, graph: DependencyGraph,
-                 to: MyNode, first: int) -> None:
-    # Combine cookies[] with Cookie header pairs so HARs that only carry the
-    # header (or graphs loaded from JSON built before har_model supplemented
-    # them) are still detected. Dedupe on (name, value).
-    combined = list(to.request.cookies)
-    seen = {(c.name, c.value) for c in combined}
-    for h in to.request.headers:
-        if (h.name or "").lower() != "cookie":
+def check_cookie(
+    responses: list[Any],
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    first: int,
+) -> None:
+    """Detect correlations inside request cookies."""
+    combined_cookies = list(to_node.request.cookies)
+    seen_pairs = {(c.name, c.value) for c in combined_cookies}
+
+    for header in to_node.request.headers:
+        if (header.name or "").lower() != "cookie":
             continue
-        for pair in (h.value or "").split(";"):
+        for pair in (header.value or "").split(";"):
             pair = pair.strip()
             if not pair:
                 continue
-            if "=" in pair:
-                n, _, v = pair.partition("=")
-                n, v = n.strip(), v.strip()
-            else:
-                n, v = pair, ""
-            if not n or (n, v) in seen:
+            name, _, val = pair.partition("=")
+            name, val = name.strip(), val.strip()
+            if not name:
                 continue
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
-                v = v[1:-1]
-            if (n, v) in seen:
-                continue
-            seen.add((n, v))
-            from .har_model import Cookie as _Cookie
-            combined.append(_Cookie(name=n, value=v))
-    for c in combined:
+            if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+                val = val[1:-1]
+            if (name, val) not in seen_pairs:
+                seen_pairs.add((name, val))
+                combined_cookies.append(Cookie(name=name, value=val))
+
+    for cookie in combined_cookies:
         for ri in range(first, req_idx):
-            frm = graph.get_node_by_index(ri)
-            if frm is None:
+            source_node = graph.get_node_by_index(ri)
+            if source_node is None:
                 continue
-            def fn(atomic: AtomicObject, father, _c=c, _frm=frm, _ri=ri):
-                if V.evaluate_cookie_atomic_dep(atomic, _c.name, _c.value, father,
-                                                _frm.request.url,
-                                                consumer_url=to.request.url,
-                                                producer_method=_frm.request.method,
-                                                consumer_method=to.request.method):
-                    graph.edges.append(make_edge("cookie", _frm, to, atomic, _ri, req_idx,
-                                                 name=_c.name))
-            _walk_atomic(responses[ri], fn)
+
+            def evaluate_match(atomic: AtomicObject, parent: StructuredObject | None) -> None:
+                if V.evaluate_cookie_atomic_dep(
+                    atomic,
+                    cookie.name,
+                    cookie.value,
+                    parent,
+                    source_node.request.url,
+                    consumer_url=to_node.request.url,
+                    producer_method=source_node.request.method,
+                    consumer_method=to_node.request.method,
+                ):
+                    graph.edges.append(
+                        make_edge("cookie", source_node, to_node, atomic, ri, req_idx, name=cookie.name)
+                    )
+
+            _walk_atomic(responses[ri], evaluate_match)
 
 
-def _schema_match(request_obj_str: str, resp_node) -> StructuredObject | None:
-    """Return matching StructuredObject if schema(request)==schema(response node)."""
-    want = schema_client.generate_json_schema(request_obj_str)
+def _schema_match(request_obj_str: str, resp_node: Any) -> StructuredObject | None:
+    """Find a StructuredObject in response node whose JSON schema matches request schema."""
+    target_schema = schema_client.generate_json_schema(request_obj_str)
     stack = [resp_node]
     while stack:
-        cur = stack.pop()
-        for o in _children(cur):
-            if isinstance(o, StructuredObject):
-                if o.schema_string == want:
-                    return o
-                stack.append(o)
+        current = stack.pop()
+        for child in _get_node_children(current):
+            if isinstance(child, StructuredObject):
+                if child.schema_string == target_schema:
+                    return child
+                stack.append(child)
     return None
 
 
-def check_body(responses: list, req_idx: int, graph: DependencyGraph,
-               to: MyNode, first: int) -> None:
-    pd = to.request.postData
-    if pd is None:
+def check_body(
+    responses: list[Any],
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    first: int,
+) -> None:
+    """Detect correlations in form-urlencoded or JSON request bodies."""
+    post_data = to_node.request.postData
+    if post_data is None:
         return
-    if pd.mimeType == "application/x-www-form-urlencoded":
-        for p in pd.params:
+
+    if post_data.mimeType == "application/x-www-form-urlencoded":
+        for param in post_data.params:
             for ri in range(first, req_idx):
-                frm = graph.get_node_by_index(ri)
-                if frm is None:
+                source_node = graph.get_node_by_index(ri)
+                if source_node is None:
                     continue
-                def fn(atomic: AtomicObject, father, _p=p, _frm=frm, _ri=ri):
-                    if V.general_atomic_comparison(atomic, _p.value, _p.name, father,
-                                                   _frm.request.url,
-                                                   consumer_url=to.request.url,
-                                                   location="body",
-                                                   producer_method=_frm.request.method,
-                                                   consumer_method=to.request.method):
-                        graph.edges.append(make_edge("bodyue", _frm, to, atomic, _ri,
-                                                     req_idx, name=_p.name))
-                _walk_atomic(responses[ri], fn)
-    elif pd.mimeType == "application/json":
-        text = (pd.text or "").strip()
+
+                def evaluate_match(atomic: AtomicObject, parent: StructuredObject | None) -> None:
+                    if V.general_atomic_comparison(
+                        atomic,
+                        param.value,
+                        param.name,
+                        parent,
+                        source_node.request.url,
+                        consumer_url=to_node.request.url,
+                        location="body",
+                        producer_method=source_node.request.method,
+                        consumer_method=to_node.request.method,
+                    ):
+                        graph.edges.append(
+                            make_edge("bodyue", source_node, to_node, atomic, ri, req_idx, name=param.name)
+                        )
+
+                _walk_atomic(responses[ri], evaluate_match)
+
+    elif post_data.mimeType == "application/json":
+        text = (post_data.text or "").strip()
         if not text:
             return
         try:
             body = json.loads(text)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             return
-        _check_json_value(responses, body, None, req_idx, graph, to, first)
+        _check_json_value(responses, body, None, req_idx, graph, to_node, first)
 
 
-def _check_json_value(responses, obj, name: str | None, req_idx: int, graph: DependencyGraph,
-                      to: MyNode, first: int) -> None:
-    import json as _j
+def _check_json_value(
+    responses: list[Any],
+    obj: Any,
+    name: str | None,
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    first: int,
+) -> None:
+    """Recursively search for matching JSON structures or primitives within JSON payload."""
     if isinstance(obj, dict):
-        found = _search_schema(responses, _j.dumps(obj, separators=(",", ":")), req_idx,
-                               graph, to, name, first)
-        if found:
+        serialized = json.dumps(obj, separators=(",", ":"))
+        if _search_schema(responses, serialized, req_idx, graph, to_node, name, first):
             return
         for k, v in obj.items():
             if isinstance(v, (dict, list)):
-                _check_json_value(responses, v, k, req_idx, graph, to, first)
+                _check_json_value(responses, v, k, req_idx, graph, to_node, first)
             elif v is not None:
-                _check_primitive(responses, str(v), k, req_idx, graph, to, first)
+                _check_primitive(responses, str(v), k, req_idx, graph, to_node, first)
+
     elif isinstance(obj, list):
-        found = _search_schema(responses, _j.dumps(obj, separators=(",", ":")), req_idx,
-                               graph, to, name, first)
-        if found:
+        serialized = json.dumps(obj, separators=(",", ":"))
+        if _search_schema(responses, serialized, req_idx, graph, to_node, name, first):
             return
-        for el in obj:
-            if isinstance(el, (dict, list)):
-                _check_json_value(responses, el, name, req_idx, graph, to, first)
-            elif el is not None:
-                _check_primitive(responses, str(el), name or "", req_idx, graph, to, first)
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                _check_json_value(responses, item, name, req_idx, graph, to_node, first)
+            elif item is not None:
+                _check_primitive(responses, str(item), name or "", req_idx, graph, to_node, first)
+
     elif isinstance(obj, str):
-        _check_primitive(responses, obj, name or "", req_idx, graph, to, first)
+        _check_primitive(responses, obj, name or "", req_idx, graph, to_node, first)
 
 
-def _search_schema(responses, obj_str: str, req_idx: int, graph: DependencyGraph,
-                   to: MyNode, name: str | None, first: int) -> bool:
+def _search_schema(
+    responses: list[Any],
+    obj_str: str,
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    name: str | None,
+    first: int,
+) -> bool:
+    """Search previous responses for whole-object schema matches."""
     hit = False
     for ri in range(first, req_idx):
-        frm = graph.get_node_by_index(ri)
-        if frm is None:
+        source_node = graph.get_node_by_index(ri)
+        if source_node is None:
             continue
-        m = _schema_match(obj_str, responses[ri])
-        if m is not None:
-            e = make_edge("bodyjson", frm, to, None, ri, req_idx,
-                          name=name if name else "All", primitive=False, structured=m)
-            if m.name == "All":
-                e.name = "All"
-            graph.edges.append(e)
+        matched_structured = _schema_match(obj_str, responses[ri])
+        if matched_structured is not None:
+            edge = make_edge(
+                "bodyjson",
+                source_node,
+                to_node,
+                None,
+                ri,
+                req_idx,
+                name=name if name else "All",
+                primitive=False,
+                structured=matched_structured,
+            )
+            if matched_structured.name == "All":
+                edge.name = "All"
+            graph.edges.append(edge)
             hit = True
     return hit
 
 
-def _check_primitive(responses, value: str, name: str, req_idx: int,
-                     graph: DependencyGraph, to: MyNode, first: int) -> None:
+def _check_primitive(
+    responses: list[Any],
+    value: str,
+    name: str,
+    req_idx: int,
+    graph: DependencyGraph,
+    to_node: MyNode,
+    first: int,
+) -> None:
+    """Check primitive atomic field match across previous responses."""
     for ri in range(first, req_idx):
-        frm = graph.get_node_by_index(ri)
-        if frm is None:
+        source_node = graph.get_node_by_index(ri)
+        if source_node is None:
             continue
-        def fn(atomic: AtomicObject, father, _v=value, _n=name, _frm=frm, _ri=ri):
-            if V.general_atomic_comparison(atomic, _v, _n, father, _frm.request.url,
-                                           consumer_url=to.request.url,
-                                           location="body",
-                                           producer_method=_frm.request.method,
-                                           consumer_method=to.request.method):
-                graph.edges.append(make_edge("bodyjson", _frm, to, atomic, _ri, req_idx,
-                                             name=_n, primitive=True))
-        _walk_atomic(responses[ri], fn)
+
+        def evaluate_match(atomic: AtomicObject, parent: StructuredObject | None) -> None:
+            if V.general_atomic_comparison(
+                atomic,
+                value,
+                name,
+                parent,
+                source_node.request.url,
+                consumer_url=to_node.request.url,
+                location="body",
+                producer_method=source_node.request.method,
+                consumer_method=to_node.request.method,
+            ):
+                graph.edges.append(
+                    make_edge("bodyjson", source_node, to_node, atomic, ri, req_idx, name=name, primitive=True)
+                )
+
+        _walk_atomic(responses[ri], evaluate_match)

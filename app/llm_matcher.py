@@ -1,74 +1,41 @@
+"""LLM-assisted field semantic matcher for API dependency correlation."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
 from functools import lru_cache
+from typing import Any
 
-from ollama import Client as OllamaClient
-from openai import OpenAI
+from . import config
+from .prompts import get_prompt_template
 
-from .prompts import LLM_PROMPTS
-from . import config as app_config
+try:
+    from ollama import Client as OllamaClient
+    _HAS_OLLAMA = True
+except ImportError:
+    OllamaClient = None  # type: ignore[assignment,misc]
+    _HAS_OLLAMA = False
 
+try:
+    from openai import OpenAI
+    _HAS_OPENAI = True
+except ImportError:
+    OpenAI = None  # type: ignore[assignment,misc]
+    _HAS_OPENAI = False
 
-# ---------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
-
-@dataclass
-class LLMConfig:
-    provider: str = "ollama"
-    endpoint: str = "http://localhost:11434"
-    model: str = "qwen2.5:7b"
-    timeout: float = 30.0
-    fallback_to_lcs: bool = True
-    cache_enabled: bool = True
-
-    @classmethod
-    def from_env(cls, **overrides) -> "LLMConfig":
-        from . import config as app_config
-
-        settings = app_config.get_llm_settings()
-
-        def setting(name: str, default):
-            return overrides.get(name, settings.get(name, default))
-
-        endpoint = setting(
-            "endpoint",
-            app_config.get_env(
-                "LLM_ENDPOINT",
-                app_config.get_env(
-                    "OLLAMA_HOST", "http://localhost:11434"
-                ),
-            ),
-        )
-
-        return cls(
-            provider=setting("provider", "ollama"),
-            endpoint=endpoint.rstrip("/"),
-            model=setting("model", "qwen2.5:7b"),
-            timeout=float(setting("timeout", 30)),
-            fallback_to_lcs=bool(setting("fallback_to_lcs", True)),
-            cache_enabled=bool(setting("cache_enabled", True)),
-        )
-
-    @classmethod
-    def from_config(cls, **overrides) -> "LLMConfig":
-        return cls.from_env(**overrides)
-
-
-# ---------------------------------------------------------------------
-# Prompt and response parsing
-# ---------------------------------------------------------------------
 
 def build_prompt(
     producer_endpoint: str,
     producer_field: str,
     consumer_endpoint: str,
     consumer_field: str,
+    version: str = "version-2.0",
 ) -> str:
-    return LLM_PROMPTS["version-2.0"].format(
+    """Format matching prompt using specified prompt template version."""
+    template = get_prompt_template(version)
+    return template.format(
         producer_endpoint=producer_endpoint,
         producer_field=producer_field,
         consumer_endpoint=consumer_endpoint,
@@ -77,50 +44,42 @@ def build_prompt(
 
 
 def parse_dependency_answer(text: str | None) -> bool | None:
+    """Parse boolean response from LLM output."""
     if not text:
         return None
 
-    answer = text.strip().lower().strip("`'\". !\n\t")
-
-    if 'false' in answer:
+    cleaned = text.strip().lower().strip("`'\". !\n\t")
+    if "false" in cleaned:
         return False
-    else:
+    if "true" in cleaned:
         return True
+    return None
 
-
-# ---------------------------------------------------------------------
-# SDK clients
-# ---------------------------------------------------------------------
 
 @lru_cache(maxsize=16)
-def _ollama_client(
-    endpoint: str,
-    timeout: float,
-) -> OllamaClient:
+def _get_ollama_client(endpoint: str, timeout: float, api_key: str = "") -> Any:
+    if not _HAS_OLLAMA or OllamaClient is None:
+        raise ImportError("ollama package is required for Ollama LLM provider.")
 
-    api_key = app_config.get_env("OPENAI_API_KEY")
-
-    headers = {}
-    headers["Authorization"] = f"Bearer {api_key}"
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     return OllamaClient(
         host=endpoint,
         timeout=timeout,
-        headers=headers,
+        headers=headers if headers else None,
     )
 
 
 @lru_cache(maxsize=16)
-def _openai_client(
-    endpoint: str,
-    timeout: float,
-) -> OpenAI:
-    base_url = endpoint.rstrip("/")
+def _get_openai_client(endpoint: str, timeout: float, api_key: str = "") -> Any:
+    if not _HAS_OPENAI or OpenAI is None:
+        raise ImportError("openai package is required for OpenAI LLM provider.")
 
+    base_url = endpoint.rstrip("/")
     if not base_url.endswith("/v1"):
         base_url += "/v1"
-
-    api_key = app_config.get_env("OPENAI_API_KEY")
 
     return OpenAI(
         base_url=base_url,
@@ -129,69 +88,53 @@ def _openai_client(
     )
 
 
-def _query_ollama(prompt: str, cfg: LLMConfig) -> str | None:
-    response = _ollama_client(
-        endpoint=cfg.endpoint, 
-        timeout=cfg.timeout, 
-    ).chat(
-        model=cfg.model,
-        messages=[{"role": "system", "content": prompt}],
-        options={"temperature": 0},
+def _query_ollama(prompt: str) -> str | None:
+    client = _get_ollama_client(config.llm_endpoint, config.timeout, config.llm_apikey)
+    response = client.chat(
+        model=config.model,
+        messages=[{"role": "user", "content": prompt}],
+        options={"temperature": 0.0},
         stream=False,
     )
-    return response.message.content
+    return response.message.content if hasattr(response, "message") else None
 
 
-def _query_openai_compatible(
-    prompt: str,
-    cfg: LLMConfig,
-) -> str | None:
-
-    response = _openai_client(
-        cfg.endpoint, cfg.timeout
-    ).chat.completions.create(
-        model=cfg.model,
-        messages=[{"role": "system", "content": prompt}],
-        temperature=0,
+def _query_openai(prompt: str) -> str | None:
+    client = _get_openai_client(config.llm_endpoint, config.timeout, config.llm_apikey)
+    response = client.chat.completions.create(
+        model=config.model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0,
         max_tokens=200,
     )
-
-    if not response.choices:
-        return None
-
-    return response.choices[0].message.content
+    if response.choices:
+        return response.choices[0].message.content
+    return None
 
 
-def _query(
-    prompt: str,
-    cfg: LLMConfig,
-) -> bool | None:
+def _query(prompt: str) -> bool | None:
     try:
-        if cfg.provider == "ollama":
-            raw = _query_ollama(prompt, cfg)
-
-        elif cfg.provider == "openai":
-            raw = _query_openai_compatible(prompt, cfg)
-
+        provider = config.llm_provider.lower()
+        if provider == "ollama":
+            raw = _query_ollama(prompt)
+        elif provider == "openai":
+            raw = _query_openai(prompt)
         else:
-            raise ValueError(f"Unsupported LLM provider: {cfg.provider}")
+            logger.warning("Unsupported LLM provider: %s", provider)
+            return None
 
         return parse_dependency_answer(raw)
-
     except Exception as exc:
-        print(f"LLM request failed: {exc}")
+        logger.warning("LLM request failed: %s", exc)
         return None
 
 
-# ---------------------------------------------------------------------
-# Field matching
-# ---------------------------------------------------------------------
-
-_CACHE: dict[tuple, bool] = {}
+_MATCH_CACHE: dict[tuple[Any, ...], bool] = {}
 
 
 def clear_cache() -> None:
-    _CACHE.clear()
+    """Clear memory cache of evaluated field matches."""
+    _MATCH_CACHE.clear()
 
 
 def field_match(
@@ -201,24 +144,21 @@ def field_match(
     consumer_endpoint: str,
     consumer_field: str,
     consumer_value: str,
-    location: str,
-    cfg: LLMConfig | None = None,
+    location: str = "body",
 ) -> bool | None:
-    """Return True/False on a valid answer, otherwise None."""
-    cfg = cfg or LLMConfig.from_env()
-
+    """Verify semantic relationship between candidate producer and consumer fields."""
     cache_key = (
-        cfg.provider,
-        cfg.endpoint,
-        cfg.model,
+        config.llm_provider,
+        config.llm_endpoint,
+        config.model,
         producer_endpoint,
         producer_field,
         consumer_endpoint,
         consumer_field,
     )
 
-    if cfg.cache_enabled and cache_key in _CACHE:
-        return _CACHE[cache_key]
+    if config.cache_enabled and cache_key in _MATCH_CACHE:
+        return _MATCH_CACHE[cache_key]
 
     prompt = build_prompt(
         producer_endpoint=producer_endpoint,
@@ -227,9 +167,8 @@ def field_match(
         consumer_field=consumer_field,
     )
 
-    result = _query(prompt, cfg)
-
-    if result is not None and cfg.cache_enabled:
-        _CACHE[cache_key] = result
+    result = _query(prompt)
+    if result is not None and config.cache_enabled:
+        _MATCH_CACHE[cache_key] = result
 
     return result

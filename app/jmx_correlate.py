@@ -1,257 +1,255 @@
-"""Inject correlations into base JMX. Port of JMeterAdaption.java (HTTP only, no WSS)."""
+"""Inject dynamic correlation parameters and extractors into JMeter test plans."""
+
 from __future__ import annotations
+
 import json
+import re
 import xml.etree.ElementTree as ET
+from typing import Any
 from urllib.parse import urlparse
-from .graph import DependencyGraph, MyNode, Edge, MANUALLY_INSERTED, MANUALLY_CSV
+
+from .graph import (
+    CSVNode,
+    DependencyGraph,
+    Edge,
+    MANUALLY_CSV,
+    MANUALLY_INSERTED,
+    MyNode,
+)
+from .har_model import Entry
 from .jmx_base import should_skip
+from .response_model import AtomicObject, StructuredObject
 
-NOT_FOUND = "NOT_FOUND"
+NOT_FOUND_SENTINEL = "NOT_FOUND"
 
 
-# ---------- JSON helpers (port of findJsonPathRecursive + replace*JSONObject) ----------
-
-def find_json_path(obj, key: str, cur: str = "$"):
-    """DFS first-match path like $['a'][0]['b']. None if absent."""
+def find_json_path(obj: Any, target_key: str, current_path: str = "$") -> str | None:
+    """Find first JSON path leading to target key (e.g. $['data'][0]['token'])."""
     if isinstance(obj, dict):
         for k, v in obj.items():
-            p = f"{cur}['{k}']"
-            if k == key:
-                return p
-            r = find_json_path(v, key, p)
-            if r is not None:
-                return r
+            path = f"{current_path}['{k}']"
+            if k == target_key:
+                return path
+            sub = find_json_path(v, target_key, path)
+            if sub is not None:
+                return sub
     elif isinstance(obj, list):
-        for i, v in enumerate(obj):
-            r = find_json_path(v, key, f"{cur}[{i}]")
-            if r is not None:
-                return r
+        for idx, item in enumerate(obj):
+            sub = find_json_path(item, target_key, f"{current_path}[{idx}]")
+            if sub is not None:
+                return sub
     return None
 
 
 def bracket_to_dot(path: str) -> str:
-    import re
-    out = "$"
-    for m in re.finditer(r"\['([^]]+)'\]|\[(\d+)\]", path):
-        if m.group(1) is not None:
-            out += "." + m.group(1)
+    """Convert bracket notation ($['data'][0]['token']) to dot notation ($.data[0].token)."""
+    result = "$"
+    for match in re.finditer(r"\['([^]]+)'\]|\[(\d+)\]", path):
+        if match.group(1) is not None:
+            result += f".{match.group(1)}"
         else:
-            out += f"[{m.group(2)}]"
-    return out
+            result += f"[{match.group(2)}]"
+    return result
 
 
-def _parse_bracket(path: str):
-    import re
-    toks = []
-    for m in re.finditer(r"\['([^]]+)'\]|\[(\d+)\]", path):
-        toks.append(m.group(1) if m.group(1) is not None else int(m.group(2)))
-    return toks
+def _parse_bracket_tokens(path: str) -> list[str | int]:
+    tokens: list[str | int] = []
+    for match in re.finditer(r"\['([^]]+)'\]|\[(\d+)\]", path):
+        if match.group(1) is not None:
+            tokens.append(match.group(1))
+        else:
+            tokens.append(int(match.group(2)))
+    return tokens
 
 
 def set_by_bracket_path(data_str: str, bracket_path: str, value: str) -> str:
+    """Update value at target path in JSON string and re-serialize."""
     data = json.loads(data_str)
     node = data
-    toks = _parse_bracket(bracket_path)
-    for t in toks[:-1]:
-        node = node[t]
-    node[toks[-1]] = value
+    tokens = _parse_bracket_tokens(bracket_path)
+    for token in tokens[:-1]:
+        node = node[token]
+    node[tokens[-1]] = value
     return json.dumps(data, separators=(",", ":"))
 
 
-def _unquote_field(js: str, key: str, var_expr: str) -> str:
-    """Port of replaceFieldValue: \"${k}\":\"${...}\" -> \"${k}\":${...} for objects."""
-    return js.replace(f'"{key}":"{var_expr}"', f'"{key}":{var_expr}')
+def _unquote_field(json_str: str, key: str, var_expr: str) -> str:
+    """Unquote variable expression in JSON for structured object replacement."""
+    return json_str.replace(f'"{key}":"{var_expr}"', f'"{key}":{var_expr}')
 
 
-# ---------- sampler navigation ----------
-
-def _children_by_tag(elem: ET.Element, tag: str):
-    return [c for c in elem if c.tag == tag]
-
-
-def _str_prop(elem: ET.Element, name: str):
-    for c in elem:
-        if c.tag == "stringProp" and c.get("name") == name:
-            return c
+def _get_string_prop(elem: ET.Element, name: str) -> ET.Element | None:
+    for child in elem:
+        if child.tag == "stringProp" and child.get("name") == name:
+            return child
     return None
 
 
-def _thread_group_hashtree(root: ET.Element) -> ET.Element | None:
-    for tg in root.iter("ThreadGroup"):
-        # parent hashTree: find in tree by walking
-        pass
-    # structure: jmeterTestPlan/hashTree/hashTree[i] ; locate ThreadGroup's following hashTree
+def _find_thread_group_hashtree(root: ET.Element) -> ET.Element | None:
     for ht in root.iter("hashTree"):
-        kids = list(ht)
-        for i, k in enumerate(kids):
-            if k.tag == "ThreadGroup" and i + 1 < len(kids) and kids[i + 1].tag == "hashTree":
-                return kids[i + 1]
+        children = list(ht)
+        for i, child in enumerate(children):
+            if child.tag == "ThreadGroup" and i + 1 < len(children) and children[i + 1].tag == "hashTree":
+                return children[i + 1]
     return None
 
 
-def _samplers_in_order(ght: ET.Element):
-    kids = list(ght)
-    out = []
-    for i, k in enumerate(kids):
-        if k.tag == "HTTPSamplerProxy":
-            ht = kids[i + 1] if i + 1 < len(kids) and kids[i + 1].tag == "hashTree" else None
-            out.append((k, ht))
-    return out
+def _get_ordered_samplers(parent_ht: ET.Element) -> list[tuple[ET.Element, ET.Element | None]]:
+    children = list(parent_ht)
+    samplers: list[tuple[ET.Element, ET.Element | None]] = []
+    for i, child in enumerate(children):
+        if child.tag == "HTTPSamplerProxy":
+            sub_ht = children[i + 1] if i + 1 < len(children) and children[i + 1].tag == "hashTree" else None
+            samplers.append((child, sub_ht))
+    return samplers
 
 
-# ---------- replacements ----------
-
-def _ref(dep_name: str, from_idx: int, dep_value: str) -> str:
+def _build_var_ref(dep_name: str, from_idx: int, dep_value: str) -> str:
     if dep_value in (MANUALLY_INSERTED, MANUALLY_CSV):
-        return dep_name  # literal (manual or CSV column value handled by CSV config/UDV)
-    return "${" + f"{dep_name}_{from_idx}" + "}"
+        return dep_name
+    return f"${{{dep_name}_{from_idx}}}"
 
 
 def replace_url(sampler: ET.Element, deps: list[Edge], node: MyNode) -> None:
-    path_el = _str_prop(sampler, "HTTPSampler.path")
-    # Java reads full URL from node and rewrites path element with full new URL
+    """Replace static segments in sampler URL with correlation variable references."""
+    path_elem = _get_string_prop(sampler, "HTTPSampler.path")
     try:
-        uri = urlparse(node.request.url)
+        parsed_url = urlparse(node.request.url)
     except Exception:
         return
-    segs = uri.path.split("/")
+
+    segments = parsed_url.path.split("/")
     changed = False
-    for e in deps:
-        if e.type != "url" or not e.dependency:
+
+    for edge in deps:
+        if edge.type != "url" or not edge.dependency:
             continue
-        for i, s in enumerate(segs):
-            if s == e.subPath:
-                segs[i] = _ref(e.dependency.name, e.from_index, e.dependency.value)
+        for idx, seg in enumerate(segments):
+            if seg == edge.subPath:
+                segments[idx] = _build_var_ref(edge.dependency.name, edge.from_index, edge.dependency.value)
                 changed = True
                 break
-    if not changed or path_el is None:
+
+    if not changed or path_elem is None:
         return
-    new_path = "/" + "/".join(s for s in segs if s != "") if any(s != "" for s in segs) else "/"
-    auth = uri.hostname or ""
-    if uri.port:
-        auth += f":{uri.port}"
-    new_url = f"{uri.scheme}://{auth}{new_path}"
-    if uri.query:
-        new_url += f"?{uri.query}"
-    if uri.fragment:
-        new_url += f"#{uri.fragment}"
-    path_el.text = new_url
+
+    clean_segs = [s for s in segments if s]
+    new_path = f"/{'/'.join(clean_segs)}" if clean_segs else "/"
+    authority = parsed_url.hostname or ""
+    if parsed_url.port:
+        authority += f":{parsed_url.port}"
+
+    new_full_url = f"{parsed_url.scheme}://{authority}{new_path}"
+    if parsed_url.query:
+        new_full_url += f"?{parsed_url.query}"
+    if parsed_url.fragment:
+        new_full_url += f"#{parsed_url.fragment}"
+
+    path_elem.text = new_full_url
 
 
 def replace_headers(sampler: ET.Element, deps: list[Edge]) -> None:
-    for ep in sampler.iter("elementProp"):
-        if ep.get("name") != "HTTPSampler.header_manager":
+    """Update HeaderManager headers in sampler with correlation variables."""
+    for prop in sampler.iter("elementProp"):
+        if prop.get("name") != "HTTPSampler.header_manager":
             continue
-        for h in ep.iter("elementProp"):
+        for h in prop.iter("elementProp"):
             hname = h.get("name", "")
-            # Cookies are managed by HTTP Cookie Manager (see replace_cookies),
-            # never as manual headers.
             if (hname or "").lower() in ("cookie", "set-cookie"):
                 continue
-            for e in deps:
-                if e.type != "header" or not e.dependency or hname != e.header_name:
+            for edge in deps:
+                if edge.type != "header" or not edge.dependency or hname != edge.header_name:
                     continue
-                val = _ref(e.dependency.name, e.from_index, e.dependency.value)
-                if hname == "Authorization" and e.dependency.value not in (
-                        MANUALLY_INSERTED, MANUALLY_CSV):
-                    val = "Bearer " + val
+                var_ref = _build_var_ref(edge.dependency.name, edge.from_index, edge.dependency.value)
+                if hname == "Authorization" and edge.dependency.value not in (MANUALLY_INSERTED, MANUALLY_CSV):
+                    var_ref = f"Bearer {var_ref}"
                 for sp in h:
                     if sp.tag == "stringProp" and sp.get("name") == "Header.value":
-                        sp.text = val
+                        sp.text = var_ref
 
 
-def _ensure_header_manager(sampler: ET.Element):
-    """Return (manager_prop, collection) creating them if missing."""
-    for ep in sampler:
-        if ep.tag == "elementProp" and ep.get("name") == "HTTPSampler.header_manager":
-            for coll in ep:
+def _ensure_header_manager(sampler: ET.Element) -> tuple[ET.Element, ET.Element]:
+    for prop in sampler:
+        if prop.tag == "elementProp" and prop.get("name") == "HTTPSampler.header_manager":
+            for coll in prop:
                 if coll.tag == "collectionProp":
-                    return ep, coll
-    mgr = ET.Element("elementProp", {"name": "HTTPSampler.header_manager",
-                                     "elementType": "HeaderManager"})
+                    return prop, coll
+    mgr = ET.Element("elementProp", {"name": "HTTPSampler.header_manager", "elementType": "HeaderManager"})
     coll = ET.SubElement(mgr, "collectionProp", {"name": "HeaderManager.headers"})
     sampler.append(mgr)
     return mgr, coll
 
 
 def replace_cookies(sampler: ET.Element, deps: list[Edge]) -> None:
-    """Inject correlated Cookie header.
-
-    Every ``cookie``-type edge needs an explicit ``Cookie`` header on the
-    consumer sampler because the base JMX (jmx_base) strips recorded Cookie
-    headers entirely:
-
-    - automatic edges (Set-Cookie -> Cookie, or JSON field -> Cookie):
-      ``<name>=${<depName>_<from_idx>}``
-    - literal/CSV edges: ``<name>=<literal>``
-
-    The HTTP Cookie Manager kept at top level remains as a fallback for
-    plain session replay, but explicit correlation is what makes the
-    dependency graph actually effective in the JMX (and visible).
-    """
-    cookie_edges = [e for e in deps
-                    if e.type == "cookie" and e.dependency is not None]
+    """Inject Cookie header containing correlated cookie variables."""
+    cookie_edges = [e for e in deps if e.type == "cookie" and e.dependency is not None]
     if not cookie_edges:
         return
-    # Dedupe by cookie name — last (closest producer) wins.
+
+    # Deduplicate cookies by name; last producer wins
     by_name: dict[str, Edge] = {}
-    for e in cookie_edges:
-        by_name[e.name or (e.dependency.name if e.dependency else "")] = e
-    pairs = []
-    for cname, e in by_name.items():
-        assert e.dependency is not None
-        ref = _ref(e.dependency.name, e.from_index, e.dependency.value)
-        pairs.append(f"{cname}={ref}")
-    cookie_value = "; ".join(pairs)
-    # Reuse an existing Cookie header if present (old base docs), else create.
-    for ep in sampler.iter("elementProp"):
-        if ep.get("name") != "HTTPSampler.header_manager":
+    for edge in cookie_edges:
+        key = edge.name or (edge.dependency.name if edge.dependency else "")
+        by_name[key] = edge
+
+    pairs = [
+        f"{name}={_build_var_ref(edge.dependency.name, edge.from_index, edge.dependency.value)}"
+        for name, edge in by_name.items()
+        if edge.dependency is not None
+    ]
+    cookie_str = "; ".join(pairs)
+
+    for prop in sampler.iter("elementProp"):
+        if prop.get("name") != "HTTPSampler.header_manager":
             continue
-        for h in ep.iter("elementProp"):
+        for h in prop.iter("elementProp"):
             if (h.get("name", "") or "").lower() == "cookie":
                 for sp in h:
                     if sp.tag == "stringProp" and sp.get("name") == "Header.value":
-                        sp.text = cookie_value
+                        sp.text = cookie_str
                 return
+
     _, coll = _ensure_header_manager(sampler)
-    hp = ET.SubElement(coll, "elementProp", {"name": "Cookie", "elementType": "Header"})
-    c = ET.SubElement(hp, "stringProp", {"name": "Header.name"})
-    c.text = "Cookie"
-    c = ET.SubElement(hp, "stringProp", {"name": "Header.value"})
-    c.text = cookie_value
+    header_elem = ET.SubElement(coll, "elementProp", {"name": "Cookie", "elementType": "Header"})
+    name_sp = ET.SubElement(header_elem, "stringProp", {"name": "Header.name"})
+    name_sp.text = "Cookie"
+    val_sp = ET.SubElement(header_elem, "stringProp", {"name": "Header.value"})
+    val_sp.text = cookie_str
 
 
 def replace_args(sampler: ET.Element, deps: list[Edge]) -> None:
-    """Query params + urlencoded form (Java only handled queryparam; we also handle bodyue)."""
-    for ep in sampler:
-        if ep.tag != "elementProp" or ep.get("name") != "HTTPsampler.Arguments":
+    """Replace URL query parameters and form body arguments with variable references."""
+    for prop in sampler:
+        if prop.tag != "elementProp" or prop.get("name") != "HTTPsampler.Arguments":
             continue
-        for coll in ep:
+        for coll in prop:
             if coll.tag != "collectionProp":
                 continue
             for arg in coll:
                 if arg.tag != "elementProp":
                     continue
-                aname = arg.get("name", "")
-                for e in deps:
-                    match = (e.type == "queryparam" and aname == e.query_param_name) or \
-                            (e.type == "bodyue" and aname == e.name)
-                    if match and e.dependency:
+                arg_name = arg.get("name", "")
+                for edge in deps:
+                    matched = (
+                        (edge.type == "queryparam" and arg_name == edge.query_param_name)
+                        or (edge.type == "bodyue" and arg_name == edge.name)
+                    )
+                    if matched and edge.dependency:
                         for sp in arg:
                             if sp.tag == "stringProp" and sp.get("name") == "Argument.value":
-                                sp.text = _ref(e.dependency.name, e.from_index,
-                                               e.dependency.value)
-                            if sp.tag == "boolProp" and sp.get("name") == \
-                                    "HTTPArgument.always_encode":
+                                sp.text = _build_var_ref(
+                                    edge.dependency.name, edge.from_index, edge.dependency.value
+                                )
+                            if sp.tag == "boolProp" and sp.get("name") == "HTTPArgument.always_encode":
                                 sp.text = "false"
 
 
-def _body_value_elements(sampler: ET.Element):
-    out = []
-    for ep in sampler:
-        if ep.tag != "elementProp" or ep.get("name") != "HTTPsampler.Arguments":
+def _get_body_value_elements(sampler: ET.Element) -> list[ET.Element]:
+    result: list[ET.Element] = []
+    for prop in sampler:
+        if prop.tag != "elementProp" or prop.get("name") != "HTTPsampler.Arguments":
             continue
-        for coll in ep:
+        for coll in prop:
             if coll.tag != "collectionProp":
                 continue
             for arg in coll:
@@ -259,223 +257,287 @@ def _body_value_elements(sampler: ET.Element):
                     continue
                 for sp in arg:
                     if sp.tag == "stringProp" and sp.get("name") == "Argument.value":
-                        out.append(sp)
-    return out
+                        result.append(sp)
+    return result
 
 
-def replace_json_body(sampler: ET.Element, sampler_ht: ET.Element | None,
-                      deps: list[Edge], node: MyNode) -> None:
-    bodies = [e for e in deps if e.type == "bodyjson"]
-    if not bodies:
+def replace_json_body(
+    sampler: ET.Element,
+    sampler_ht: ET.Element | None,
+    deps: list[Edge],
+    node: MyNode,
+) -> None:
+    """Inject variables into JSON body or attach JSR223 Groovy preprocessor for complex merges."""
+    body_edges = [e for e in deps if e.type == "bodyjson"]
+    if not body_edges or not node.request.postData:
         return
-    if node.request.postData is None or "application/json" not in (node.request.postData.mimeType or ""):
+    if "application/json" not in (node.request.postData.mimeType or ""):
         return
-    targets = _body_value_elements(sampler)
+
+    targets = _get_body_value_elements(sampler)
     if not targets:
         return
-    data = targets[0].text or ""
-    whole = [e for e in bodies if not e.primitive and e.name == "All"]
-    if whole:
-        if len(bodies) == 1:
-            e = whole[0]
-            ref = "${" + f"{e.structured.name}_{e.from_index}" + "}" if e.structured else data
-            targets[0].text = ref
+
+    body_text = targets[0].text or ""
+    whole_matches = [e for e in body_edges if not e.primitive and e.name == "All"]
+
+    if whole_matches:
+        if len(body_edges) == 1:
+            edge = whole_matches[0]
+            targets[0].text = f"${{{edge.structured.name}_{edge.from_index}}}" if edge.structured else body_text
         else:
-            _add_groovy_preprocessor(sampler_ht, bodies, node)
-            targets[0].text = "${modifiedBody_" + str(node.indexs) + "}"
+            _add_groovy_preprocessor(sampler_ht, body_edges, node)
+            targets[0].text = f"${{modifiedBody_{node.indexs}}}"
         return
+
     try:
         template = json.loads(node.request.postData.text or "{}")
     except Exception:
         template = {}
-    for e in bodies:
-        path = find_json_path(template, e.name, "$")
+
+    for edge in body_edges:
+        path = find_json_path(template, edge.name, "$")
         if path is None:
             continue
-        if e.primitive and e.dependency:
-            ref = _ref(e.dependency.name, e.from_index, e.dependency.value)
+        if edge.primitive and edge.dependency:
+            ref = _build_var_ref(edge.dependency.name, edge.from_index, edge.dependency.value)
             try:
-                data = set_by_bracket_path(data, path, ref)
+                body_text = set_by_bracket_path(body_text, path, ref)
             except Exception:
                 continue
-        elif not e.primitive and e.structured:
-            ref = "${" + f"{e.structured.name}_{e.from_index}" + "}"
+        elif not edge.primitive and edge.structured:
+            ref = f"${{{edge.structured.name}_{edge.from_index}}}"
             try:
-                data = set_by_bracket_path(data, path, ref)
-                data = _unquote_field(data, e.name, ref)
+                body_text = set_by_bracket_path(body_text, path, ref)
+                body_text = _unquote_field(body_text, edge.name, ref)
             except Exception:
                 continue
-    targets[0].text = data
+
+    targets[0].text = body_text
 
 
-def _add_groovy_preprocessor(sampler_ht: ET.Element | None, bodies: list[Edge],
-                             node: MyNode) -> None:
+def _add_groovy_preprocessor(
+    sampler_ht: ET.Element | None,
+    bodies: list[Edge],
+    node: MyNode,
+) -> None:
     if sampler_ht is None:
         return
-    prev_all = next((e.from_index for e in bodies
-                     if not e.primitive and e.name == "All"), bodies[0].from_index)
-    lines = ["import com.jayway.jsonpath.JsonPath",
-             "import com.jayway.jsonpath.DocumentContext", "",
-             f'def originalJson = vars.get("All_{prev_all}")',
-             "DocumentContext jsonDoc = JsonPath.parse(originalJson)",
-             "def substitutions = ["]
+
+    prev_all = next((e.from_index for e in bodies if not e.primitive and e.name == "All"), bodies[0].from_index)
+    lines = [
+        "import com.jayway.jsonpath.JsonPath",
+        "import com.jayway.jsonpath.DocumentContext",
+        "",
+        f'def originalJson = vars.get("All_{prev_all}")',
+        "DocumentContext jsonDoc = JsonPath.parse(originalJson)",
+        "def substitutions = [",
+    ]
+
     try:
-        template = json.loads(node.request.postData.text or "{}")
+        template = json.loads(node.request.postData.text or "{}") if node.request.postData else {}
     except Exception:
         template = {}
-    for e in bodies:
-        if not e.primitive and e.name == "All":
+
+    for edge in bodies:
+        if not edge.primitive and edge.name == "All":
             continue
-        arr_path = find_json_path(template, e.name, "$")
-        dot = bracket_to_dot(arr_path) if arr_path else "$." + e.name
-        if e.primitive and e.dependency:
-            if e.dependency.value in (MANUALLY_INSERTED, MANUALLY_CSV):
-                lines.append(f"[path:'{dot}', newValue:'{e.dependency.name}'],")
+        arr_path = find_json_path(template, edge.name, "$")
+        dot_path = bracket_to_dot(arr_path) if arr_path else f"$.{edge.name}"
+
+        if edge.primitive and edge.dependency:
+            if edge.dependency.value in (MANUALLY_INSERTED, MANUALLY_CSV):
+                lines.append(f"[path:'{dot_path}', newValue:'{edge.dependency.name}'],")
             else:
-                lines.append(f"[path:'{dot}', newValue:'${{{e.dependency.name}_{e.from_index}}}'],")
-        elif not e.primitive and e.structured:
-            lines.append(f"[path:'{dot}', newValue:'${{{e.structured.name}_{e.from_index}}}'],")
-    lines += ["]", "substitutions.each { sub ->", "    jsonDoc.set(sub.path, sub.newValue)", "}",
-              "String modifiedJson = jsonDoc.jsonString()",
-              f'vars.put("modifiedBody_{node.indexs}",modifiedJson)']
-    pre = ET.Element("JSR223PreProcessor",
-                     {"guiclass": "TestBeanGUI", "testclass": "JSR223PreProcessor",
-                      "testname": "Modify previously saved json response", "enabled": "true"})
-    for n, t in (("scriptLanguage", "groovy"), ("parameters", ""), ("filename", ""),
-                 ("cacheKey", "true")):
-        c = ET.SubElement(pre, "stringProp", {"name": n})
-        c.text = t
-    sc = ET.SubElement(pre, "stringProp", {"name": "script"})
-    sc.text = "\n".join(lines)
-    sampler_ht.append(pre)
+                lines.append(f"[path:'{dot_path}', newValue:'${{{edge.dependency.name}_{edge.from_index}}}'],")
+        elif not edge.primitive and edge.structured:
+            lines.append(f"[path:'{dot_path}', newValue:'${{{edge.structured.name}_{edge.from_index}}}'],")
+
+    lines.extend([
+        "]",
+        "substitutions.each { sub ->",
+        "    jsonDoc.set(sub.path, sub.newValue)",
+        "}",
+        "String modifiedJson = jsonDoc.jsonString()",
+        f'vars.put("modifiedBody_{node.indexs}", modifiedJson)',
+    ])
+
+    preprocessor = ET.Element(
+        "JSR223PreProcessor",
+        {
+            "guiclass": "TestBeanGUI",
+            "testclass": "JSR223PreProcessor",
+            "testname": "Modify previously saved json response",
+            "enabled": "true",
+        },
+    )
+
+    for prop_name, prop_val in (
+        ("scriptLanguage", "groovy"),
+        ("parameters", ""),
+        ("filename", ""),
+        ("cacheKey", "true"),
+    ):
+        child = ET.SubElement(preprocessor, "stringProp", {"name": prop_name})
+        child.text = prop_val
+
+    script_elem = ET.SubElement(preprocessor, "stringProp", {"name": "script"})
+    script_elem.text = "\n".join(lines)
+    sampler_ht.append(preprocessor)
 
 
-def add_json_extractor(sampler_ht: ET.Element, deps: list) -> None:
-    """Port of addRegExtractorMain: one JSONPostProcessor for all extracted vars.
+def add_json_extractor(sampler_ht: ET.Element, deps: list[Any]) -> None:
+    """Inject a JSONPostProcessor into sampler hashTree for extracting dynamic values."""
+    names: list[str] = []
+    paths: list[str] = []
 
-    Set-Cookie origin atomics (from_set_cookie=True, xpath=None) are skipped
-    here — they are extracted from response *headers* via
-    :func:`add_cookie_regex_extractors`, since a JSON extractor cannot read
-    headers.
-    """
-    names, paths = [], []
-    for o in deps:
-        from .response_model import AtomicObject, StructuredObject
-        if isinstance(o, AtomicObject):
-            if o.from_set_cookie:
+    for obj in deps:
+        if isinstance(obj, AtomicObject):
+            if obj.from_set_cookie:
                 continue
-            # need originating index: find in edges is done by caller; here xpath only
-            names.append(getattr(o, "_ref_name", o.name))
-            paths.append(o.xpath or "")
-        elif isinstance(o, StructuredObject):
-            names.append(getattr(o, "_ref_name", o.name))
-            paths.append(o.xpath or "")
+            names.append(getattr(obj, "_ref_name", obj.name))
+            paths.append(obj.xpath or "")
+        elif isinstance(obj, StructuredObject):
+            names.append(getattr(obj, "_ref_name", obj.name))
+            paths.append(obj.xpath or "")
+
     if not names:
         return
-    ext = ET.Element("JSONPostProcessor",
-                     {"guiclass": "JSONPostProcessorGui", "testclass": "JSONPostProcessor",
-                      "testname": "JSON Extractor", "enable": "true"})
-    for n, t in (("JSONPostProcessor.referenceNames", ";".join(names)),
-                 ("JSONPostProcessor.jsonPathExprs", ";".join(paths)),
-                 ("JSONPostProcessor.match_numbers", ""),
-                 ("JSONPostProcessor.defaultValues",
-                  ";".join(["NOT_FOUND"] * len(names)))):
-        c = ET.SubElement(ext, "stringProp", {"name": n})
-        c.text = t
-    sampler_ht.append(ext)
+
+    extractor = ET.Element(
+        "JSONPostProcessor",
+        {
+            "guiclass": "JSONPostProcessorGui",
+            "testclass": "JSONPostProcessor",
+            "testname": "JSON Extractor",
+            "enabled": "true",
+        },
+    )
+
+    for prop_name, prop_val in (
+        ("JSONPostProcessor.referenceNames", ";".join(names)),
+        ("JSONPostProcessor.jsonPathExprs", ";".join(paths)),
+        ("JSONPostProcessor.match_numbers", ""),
+        ("JSONPostProcessor.defaultValues", ";".join([NOT_FOUND_SENTINEL] * len(names))),
+    ):
+        child = ET.SubElement(extractor, "stringProp", {"name": prop_name})
+        child.text = prop_val
+
+    sampler_ht.append(extractor)
     ET.SubElement(sampler_ht, "hashTree")
 
 
-def add_cookie_regex_extractors(sampler_ht: ET.Element, cookie_deps: list) -> None:
-    """One RegexExtractor per Set-Cookie variable (response headers).
-
-    ``cookie_deps`` are AtomicObjects with ``from_set_cookie=True`` already
-    tagged with ``_ref_name`` (``<name>_<producer_har_idx>``). The regex
-    captures the cookie value from e.g. ``Set-Cookie: sessionid=abc; Path=/``.
-    ``useHeaders=true`` scopes the match to response headers.
-    """
-    from .response_model import AtomicObject
-    seen = set()
-    for o in cookie_deps:
-        if not isinstance(o, AtomicObject) or not o.from_set_cookie:
+def add_cookie_regex_extractors(sampler_ht: ET.Element, cookie_deps: list[Any]) -> None:
+    """Inject RegexExtractors targeting Set-Cookie response headers."""
+    seen: set[str] = set()
+    for obj in cookie_deps:
+        if not isinstance(obj, AtomicObject) or not obj.from_set_cookie:
             continue
-        ref = getattr(o, "_ref_name", o.name)
+        ref = getattr(obj, "_ref_name", obj.name)
         if ref in seen:
             continue
         seen.add(ref)
-        ext = ET.Element("RegexExtractor",
-                         {"guiclass": "RegexExtractorGui", "testclass": "RegexExtractor",
-                          "testname": f"Regex Extractor - cookie {o.name}", "enabled": "true"})
-        # Matches `NAME=value` up to ';' or end-of-line (covers attributes or bare cookie).
-        regex = f"{o.name}=([^;\\r\\n]+)"
-        for n, t in (("RegexExtractor.useHeaders", "true"),
-                     ("RegexExtractor.refname", ref),
-                     ("RegexExtractor.regex", regex),
-                     ("RegexExtractor.template", "$1$"),
-                     ("RegexExtractor.default", NOT_FOUND),
-                     ("RegexExtractor.match_number", "1")):
-            c = ET.SubElement(ext, "stringProp", {"name": n})
-            c.text = t
-        sampler_ht.append(ext)
+
+        extractor = ET.Element(
+            "RegexExtractor",
+            {
+                "guiclass": "RegexExtractorGui",
+                "testclass": "RegexExtractor",
+                "testname": f"Regex Extractor - cookie {obj.name}",
+                "enabled": "true",
+            },
+        )
+
+        for prop_name, prop_val in (
+            ("RegexExtractor.useHeaders", "true"),
+            ("RegexExtractor.refname", ref),
+            ("RegexExtractor.regex", f"{obj.name}=([^;\\r\\n]+)"),
+            ("RegexExtractor.template", "$1$"),
+            ("RegexExtractor.default", NOT_FOUND_SENTINEL),
+            ("RegexExtractor.match_number", "1"),
+        ):
+            child = ET.SubElement(extractor, "stringProp", {"name": prop_name})
+            child.text = prop_val
+
+        sampler_ht.append(extractor)
         ET.SubElement(sampler_ht, "hashTree")
 
 
-def _csv_element(csv) -> ET.Element:
-    el = ET.Element("CSVDataSet", {"guiclass": "TestBeanGUI", "testclass": "CSVDataSet",
-                                   "testname": f"CSV Data Set Config {csv.filename}",
-                                   "enabled": "true"})
-    for n, t in (("filename", csv.filename), ("fileEncoding", csv.encoding),
-                 ("variableNames", csv.variablesName),
-                 ("ignoreFirstLine", str(csv.ignorefirstLine).lower()),
-                 ("delimiter", ","), ("quotedData", "false"), ("recycle", "true"),
-                 ("stopThread", "false"), ("shareMode", "shareMode.all")):
-        c = ET.SubElement(el, "stringProp" if "Prop" not in n else "stringProp", {"name": n})
-        if n in ("ignoreFirstLine", "quotedData", "recycle", "stopThread"):
-            c.tag = "boolProp"
-        c.text = t
-    return el
+def _build_csv_dataset_element(csv: CSVNode) -> ET.Element:
+    elem = ET.Element(
+        "CSVDataSet",
+        {
+            "guiclass": "TestBeanGUI",
+            "testclass": "CSVDataSet",
+            "testname": f"CSV Data Set Config {csv.filename}",
+            "enabled": "true",
+        },
+    )
+    props = (
+        ("filename", csv.filename, False),
+        ("fileEncoding", csv.encoding, False),
+        ("variableNames", csv.variablesName, False),
+        ("ignoreFirstLine", str(csv.ignorefirstLine).lower(), True),
+        ("delimiter", ",", False),
+        ("quotedData", "false", True),
+        ("recycle", "true", True),
+        ("stopThread", "false", True),
+        ("shareMode", "shareMode.all", False),
+    )
+    for name, val, is_bool in props:
+        tag = "boolProp" if is_bool else "stringProp"
+        child = ET.SubElement(elem, tag, {"name": name})
+        child.text = val
+
+    return elem
 
 
-# ---------- entry point ----------
-
-def correlate(tree: ET.ElementTree, graph: DependencyGraph, entries) -> ET.ElementTree:
+def correlate(
+    tree: ET.ElementTree,
+    graph: DependencyGraph,
+    entries: list[Entry],
+) -> ET.ElementTree:
+    """Correlate base JMX test plan using dynamic dependencies identified in graph."""
     root = tree.getroot()
-    ght = _thread_group_hashtree(root)
-    if ght is None:
-        raise RuntimeError("ThreadGroup hashTree not found in base JMX")
-    # CSV configs first (port of appendCSVConfig)
+    tg_hashtree = _find_thread_group_hashtree(root)
+    if tg_hashtree is None:
+        raise RuntimeError("ThreadGroup hashTree could not be located in base JMX")
+
     for csv in graph.csv_deps():
-        ght.insert(0, ET.Element("hashTree"))
-        ght.insert(0, _csv_element(csv))
-    # align samplers with HAR entry indexes (same filter as base build)
-    filt = [(i, e) for i, e in enumerate(entries)
-            if not should_skip(e.request.url)
-            and not (e.request.url or "").lower().startswith(("ws://", "wss://"))]
-    samplers = _samplers_in_order(ght)
-    if len(samplers) != len(filt):
-        raise RuntimeError(f"sampler/entry mismatch: {len(samplers)} vs {len(filt)}")
-    for (har_idx, entry), (sampler, sht) in zip(filt, samplers):
+        tg_hashtree.insert(0, ET.Element("hashTree"))
+        tg_hashtree.insert(0, _build_csv_dataset_element(csv))
+
+    filtered_entries = [
+        (i, e) for i, e in enumerate(entries)
+        if not should_skip(e.request.url) and not (e.request.url or "").lower().startswith(("ws://", "wss://"))
+    ]
+
+    samplers = _get_ordered_samplers(tg_hashtree)
+    if len(samplers) != len(filtered_entries):
+        raise RuntimeError(f"Sampler mismatch: {len(samplers)} samplers vs {len(filtered_entries)} HAR entries")
+
+    for (har_idx, entry), (sampler, sht) in zip(filtered_entries, samplers):
         node = graph.get_node_by_index(har_idx)
         if node is None:
-            # fallback: match by URL+method (robust when graph was edited)
             node = graph.get_node_by_url_method(entry.request.url, entry.request.method)
         if node is None:
             continue
+
         deps = graph.deps_by_node(node)
         replace_url(sampler, deps, node)
         replace_headers(sampler, deps)
         replace_cookies(sampler, deps)
         replace_args(sampler, deps)
         replace_json_body(sampler, sht, deps, node)
+
         extracted = graph.deps_to_extract(node, har_idx)
-        # tag ref names with originating index for extractor element
-        for o in extracted:
-            o._ref_name = f"{o.name}_{har_idx}"  # type: ignore[attr-defined]
+        for obj in extracted:
+            obj._ref_name = f"{obj.name}_{har_idx}"  # type: ignore[attr-defined]
+
         if extracted and sht is not None:
-            from .response_model import AtomicObject as _AO
-            cookie_from_header = [o for o in extracted
-                                  if isinstance(o, _AO) and o.from_set_cookie]
+            cookie_deps = [o for o in extracted if isinstance(o, AtomicObject) and o.from_set_cookie]
             add_json_extractor(sht, extracted)
-            if cookie_from_header:
-                add_cookie_regex_extractors(sht, cookie_from_header)
+            if cookie_deps:
+                add_cookie_regex_extractors(sht, cookie_deps)
+
     return tree

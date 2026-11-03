@@ -1,105 +1,129 @@
-"""Response flattening. Mirrors Services/ResponseAnalyzer/ResponseAnalyzer.java."""
+"""Response flattening and structured decomposition into atomic fields."""
+
 from __future__ import annotations
-from .har_model import Header
-from .response_model import AtomicObject, StructuredObject, ResponseUnstructured
+
+import json
+from typing import Any
+
 from . import schema_client
+from .har_model import Header
+from .response_model import AtomicObject, ResponseUnstructured, StructuredObject
 
 
-def _new_structured(name: str, value: str, xpath: str) -> StructuredObject:
-    return StructuredObject(name=name, value=value, xpath=xpath,
-                            schema_string=schema_client.generate_json_schema(value))
+def _serialize_json_fast(obj: Any) -> str:
+    """Serialize object with compact separators for canonical JSON schema lookup."""
+    return json.dumps(obj, separators=(",", ":"))
 
 
-def _visit(obj, xpath: str, out: list) -> None:
+def _visit(obj: Any, xpath: str, out: list[Any]) -> None:
+    """Recursively traverse dictionaries and lists, extracting atomic and structured objects."""
     if isinstance(obj, dict):
         for key, val in obj.items():
             if val is None:
                 continue
+            child_path = f"{xpath}.{key}"
             if isinstance(val, (str, int, float, bool)):
-                out.append(AtomicObject(value=str(val), name=str(key), xpath=f"{xpath}.{key}"))
+                out.append(AtomicObject(value=str(val), name=str(key), xpath=child_path))
             elif isinstance(val, dict):
-                import json
-                s = StructuredObject(name=str(key), value=json.dumps(val, separators=(",", ":")),
-                                     xpath=f"{xpath}.{key}",
-                                     schema_string=schema_client.generate_json_schema(
-                                         json.dumps(val, separators=(",", ":"))))
+                serialized = _serialize_json_fast(val)
+                s = StructuredObject(
+                    name=str(key),
+                    value=serialized,
+                    xpath=child_path,
+                    schema_string=schema_client.generate_json_schema(serialized),
+                )
                 out.append(s)
-                _visit(val, f"{xpath}.{key}", s.objects)
+                _visit(val, child_path, s.objects)
             elif isinstance(val, list):
-                import json
-                s = StructuredObject(name=str(key), value=json.dumps(val, separators=(",", ":")),
-                                     xpath=f"{xpath}.{key}",
-                                     schema_string=schema_client.generate_json_schema(
-                                         json.dumps(val, separators=(",", ":"))))
+                serialized = _serialize_json_fast(val)
+                s = StructuredObject(
+                    name=str(key),
+                    value=serialized,
+                    xpath=child_path,
+                    schema_string=schema_client.generate_json_schema(serialized),
+                )
                 out.append(s)
-                _iterate_array(val, f"{xpath}.{key}", str(key), s.objects)
+                _iterate_array(val, child_path, str(key), s.objects)
+
     elif isinstance(obj, list):
-        import json
-        s = StructuredObject(name="", value=json.dumps(obj, separators=(",", ":")),
-                             xpath=xpath,
-                             schema_string=schema_client.generate_json_schema(
-                                 json.dumps(obj, separators=(",", ":"))))
+        serialized = _serialize_json_fast(obj)
+        s = StructuredObject(
+            name="",
+            value=serialized,
+            xpath=xpath,
+            schema_string=schema_client.generate_json_schema(serialized),
+        )
         out.append(s)
         _iterate_array(obj, xpath, "", s.objects)
 
 
-def _iterate_array(arr: list, xpath: str, var_name: str, out: list) -> None:
-    import json
-    for i, el in enumerate(arr):
+def _iterate_array(arr: list[Any], xpath: str, var_name: str, out: list[Any]) -> None:
+    """Traverse array items, recording indexed atomic primitives and structured objects."""
+    for idx, el in enumerate(arr):
         if el is None:
             continue
         if isinstance(el, (str, int, float, bool)):
-            out.append(AtomicObject(value=str(el), name=var_name, xpath=f"{xpath}.{var_name}[{i}]"))
+            item_path = f"{xpath}.{var_name}[{idx}]" if var_name else f"{xpath}[{idx}]"
+            out.append(AtomicObject(value=str(el), name=var_name, xpath=item_path))
         elif isinstance(el, dict):
-            s = StructuredObject(name=var_name, value=json.dumps(el, separators=(",", ":")),
-                                 xpath=f"{xpath}[{i}]",
-                                 schema_string=schema_client.generate_json_schema(
-                                     json.dumps(el, separators=(",", ":"))))
+            serialized = _serialize_json_fast(el)
+            s = StructuredObject(
+                name=var_name,
+                value=serialized,
+                xpath=f"{xpath}[{idx}]",
+                schema_string=schema_client.generate_json_schema(serialized),
+            )
             out.append(s)
-            _visit(el, f"{xpath}[{i}]", s.objects)
+            _visit(el, f"{xpath}[{idx}]", s.objects)
 
 
 def get_unstructured_response(json_text: str) -> ResponseUnstructured:
-    """Port of getUnstructuredResponse: root 'All' node + recursive flatten."""
-    import json
-    r = ResponseUnstructured()
+    """Parse JSON response text into root 'All' structure and flattened fields."""
+    response = ResponseUnstructured()
     if not json_text or not json_text.strip():
-        return r
-    t = json_text.strip()
-    r.objects.append(StructuredObject(name="All", value=json_text, xpath="$",
-                                      schema_string=schema_client.generate_json_schema(json_text)))
+        return response
+
+    cleaned = json_text.strip()
+    response.objects.append(
+        StructuredObject(
+            name="All",
+            value=cleaned,
+            xpath="$",
+            schema_string=schema_client.generate_json_schema(cleaned),
+        )
+    )
+
     try:
-        if t.startswith("{"):
-            _visit(json.loads(t), "$", r.objects)
-        elif t.startswith("["):
-            _visit(json.loads(t), "$", r.objects)
-    except Exception:
-        pass  # Java would throw; be tolerant for non-JSON bodies
-    return r
+        parsed = json.loads(cleaned)
+        _visit(parsed, "$", response.objects)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    return response
 
 
 def analyze_response_headers(headers: list[Header], resp: ResponseUnstructured) -> None:
-    """Port of analyzeResponseHeader: Set-Cookie -> AtomicObject(from_set_cookie=True)."""
+    """Extract dynamic cookie assignments from Set-Cookie headers."""
     for h in headers:
         if (h.name or "").lower() != "set-cookie":
             continue
-        first = (h.value or "").split(";")[0].strip()
-        if not first:
+        first_part = (h.value or "").split(";")[0].strip()
+        if not first_part:
             continue
-        parts = first.split("=", 1)
-        if len(parts) == 2:
-            name = parts[0].strip()
-            value = parts[1].strip()
-            # Strip surrounding quotes: Set-Cookie may quote the value.
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-                value = value[1:-1]
-            if not name:
-                continue
-            resp.objects.append(AtomicObject(value=value, name=name, xpath=None,
-                                             from_set_cookie=True))
-        elif parts:
-            name = parts[0].strip()
-            if not name:
-                continue
-            resp.objects.append(AtomicObject(value="", name=name, xpath=None,
-                                             from_set_cookie=True))
+        parts = first_part.split("=", 1)
+        name = parts[0].strip()
+        if not name:
+            continue
+
+        value = parts[1].strip() if len(parts) == 2 else ""
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+
+        resp.objects.append(
+            AtomicObject(
+                value=value,
+                name=name,
+                xpath=None,
+                from_set_cookie=True,
+            )
+        )

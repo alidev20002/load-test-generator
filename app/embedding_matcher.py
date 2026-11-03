@@ -1,24 +1,28 @@
+"""Vector embedding matcher for detecting semantic similarity between API fields."""
 
+from __future__ import annotations
+
+import logging
 import re
-from urllib.parse import urlsplit
 from functools import lru_cache
+from typing import Any
+from urllib.parse import urlsplit
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
-THRESHOLD = 0.75
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-MODEL_NAME_2 = "BAAI/bge-small-en-v1.5"
+logger = logging.getLogger(__name__)
 
+SIMILARITY_THRESHOLD = 0.75
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
-@lru_cache(maxsize=4)
-def _load_model(model_name):
-    return SentenceTransformer(
-        model_name,
-        device="cpu",
-    )
+try:
+    from sentence_transformers import SentenceTransformer
+    _HAS_SENTENCE_TRANSFORMERS = True
+except ImportError:
+    SentenceTransformer = None  # type: ignore[assignment,misc]
+    _HAS_SENTENCE_TRANSFORMERS = False
 
-BASE_URLS = [
+COMMON_API_BASES = (
     "https://api.spotify.com/v1",
     "https://www.googleapis.com/drive/v3",
     "https://www.gitlab.com/api/v4",
@@ -27,65 +31,52 @@ BASE_URLS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:8080",
-]
+)
 
 
-def _normalize(text: str) -> str:
+@lru_cache(maxsize=4)
+def _load_model(model_name: str) -> Any:
+    """Load and cache SentenceTransformer model on CPU."""
+    if not _HAS_SENTENCE_TRANSFORMERS or SentenceTransformer is None:
+        raise ImportError("sentence-transformers package is required for embedding matching.")
+    return SentenceTransformer(model_name, device="cpu")
+
+
+def _normalize_text(text: str) -> str:
+    """Convert camelCase and snake_case tokens into lowercase space-separated words."""
     text = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
     text = re.sub(r"([A-Z])([A-Z][a-z])", r"\1 \2", text)
-
     text = text.lower()
     text = re.sub(r"[^a-z0-9]+", " ", text)
-
     return " ".join(text.split())
 
 
-def _normalize_endpoint(endpoint: str, field_value: str) -> str:
-    endpoint = endpoint.strip()
-
-    # Remove optional HTTP method, e.g. GET /users/{userId}.
-    endpoint = re.sub(
+def _normalize_endpoint(endpoint: str) -> str:
+    """Strip HTTP method, host prefix, and query parameters from endpoint URL."""
+    cleaned = endpoint.strip()
+    cleaned = re.sub(
         r"^\s*(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+",
         "",
-        endpoint,
+        cleaned,
         flags=re.IGNORECASE,
     )
 
-    # Remove only a matching base URL from the beginning.
-    for base_url in BASE_URLS:
-        base = base_url.rstrip("/")
-
-        if endpoint.lower().startswith(base.lower()):
-            endpoint = endpoint[len(base):]
+    for base in COMMON_API_BASES:
+        normalized_base = base.rstrip("/")
+        if cleaned.lower().startswith(normalized_base.lower()):
+            cleaned = cleaned[len(normalized_base):]
             break
 
-    # Remove query string and fragment, if present.
-    if "://" in endpoint:
-        parsed = urlsplit(endpoint)
-        endpoint = parsed.path
+    if "://" in cleaned:
+        cleaned = urlsplit(cleaned).path
 
-    # Remove query parameters and everything after '?'.
-    endpoint = endpoint.split("?", 1)[0]
-
-    # Remove fragment.
-    endpoint = endpoint.split("#", 1)[0]
-
-    return _normalize(endpoint)
-
-def _field_text(endpoint: str, field: str, value: str) -> str:
-    return (
-        f"API endpoint: {_normalize_endpoint(endpoint=endpoint, field_value=value)}. "
-        f"Field name: {_normalize(field)}."
-    )
+    cleaned = cleaned.split("?", 1)[0].split("#", 1)[0]
+    return _normalize_text(cleaned)
 
 
-def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    denominator = np.linalg.norm(a) * np.linalg.norm(b)
-
-    if denominator == 0:
-        return 0.0
-
-    return float(np.dot(a, b) / denominator)
+def _format_field_context(endpoint: str, field_name: str) -> str:
+    """Format endpoint path and field name into textual prompt for embedding."""
+    return f"API endpoint: {_normalize_endpoint(endpoint)}. Field name: {_normalize_text(field_name)}."
 
 
 def field_match_embedding(
@@ -95,37 +86,36 @@ def field_match_embedding(
     consumer_field: str,
     consumer_value: str = "",
     producer_value: str = "",
-    model_name: str = MODEL_NAME_2,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
 ) -> tuple[bool, float]:
-    producer_name = _normalize(producer_field)
-    consumer_name = _normalize(consumer_field)
+    """Compute semantic similarity score between producer and consumer fields."""
+    if not _HAS_SENTENCE_TRANSFORMERS:
+        logger.debug("sentence-transformers not installed; skipping embedding match.")
+        return False, 0.0
 
-    if not producer_name or not consumer_name:
-        return False
+    norm_producer = _normalize_text(producer_field)
+    norm_consumer = _normalize_text(consumer_field)
 
-    # Exact normalized field names are a strong lexical signal.
-    # if producer_name == consumer_name:
-    #     return True
+    if not norm_producer or not norm_consumer:
+        return False, 0.0
 
-    model = _load_model(model_name=model_name)
+    try:
+        model = _load_model(model_name)
+        texts = [
+            _format_field_context(producer_endpoint, producer_field),
+            _format_field_context(consumer_endpoint, consumer_field),
+        ]
 
-    texts = [
-        _field_text(producer_endpoint, producer_field, producer_value),
-        _field_text(consumer_endpoint, consumer_field, consumer_value),
-        producer_name,
-        consumer_name,
-    ]
+        embeddings = model.encode(
+            texts,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
 
-    vectors = model.encode(
-        texts,
-        normalize_embeddings=True,
-        convert_to_numpy=True,
-        show_progress_bar=False,
-    )
-
-    # Semantic similarity of the complete endpoint + field context.
-    context_score = float(np.dot(vectors[0], vectors[1]))
-
-    print(f"context score between: {texts[0]} and {texts[1]} is {context_score}")
-
-    return context_score >= THRESHOLD, context_score
+        context_score = float(np.dot(embeddings[0], embeddings[1]))
+        is_match = context_score >= SIMILARITY_THRESHOLD
+        return is_match, context_score
+    except Exception as exc:
+        logger.warning("Embedding comparison failed: %s", exc)
+        return False, 0.0
