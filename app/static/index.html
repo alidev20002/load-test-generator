@@ -91,6 +91,8 @@
         </select>
         <button class="btn ghost sm active" id="labelsBtn" data-tip="Show type labels on edges">Labels</button>
         <button class="btn ghost sm" id="layoutBtn" data-tip-below="Re-spread nodes & edges automatically">⤢ Auto-layout</button>
+        <button class="btn ghost sm" id="zoomInBtn" data-tip-below="Zoom in">+</button>
+        <button class="btn ghost sm" id="zoomOutBtn" data-tip-below="Zoom out">−</button>
         <button class="btn ghost sm" id="fitBtn">⤢ Fit</button>
         <button class="btn ghost sm" id="resetZoomBtn">1:1</button>
         <button class="btn ghost sm" id="exportGraphBtn">⬇ graph.json</button>
@@ -101,9 +103,15 @@
     <div class="legend" id="legend"></div>
     <div class="graph-layout">
       <div class="canvas-wrap">
-        <svg id="graphSvg" width="100%" height="560"></svg>
+        <svg id="graphSvg" width="100%" height="620"></svg>
         <div id="tooltip" class="tooltip hidden"></div>
         <div id="emptyGraph" class="empty-graph">Build a graph from Step 1 to visualize endpoints here.<br/>Nodes = endpoints · Edges = dependencies (hover for details).</div>
+        <div class="canvas-controls">
+          <button class="ctrl-btn" id="ctrlZoomIn" title="Zoom in">+</button>
+          <button class="ctrl-btn" id="ctrlZoomOut" title="Zoom out">−</button>
+          <button class="ctrl-btn" id="ctrlFit" title="Fit to screen">⤢</button>
+          <button class="ctrl-btn" id="ctrlReset" title="Reset zoom (1:1)">1:1</button>
+        </div>
       </div>
       <aside class="side">
         <div class="tabs">

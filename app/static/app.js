@@ -3,6 +3,7 @@ const $ = (s) => document.querySelector(s);
 const state = {
   harFile: null, graph: null, mode: "LCS",
   useLlm: false, useEmbedding: false, selected: null, // {kind:'node'|'edge', id}
+  hovered: null, // {kind:'node'|'edge', id}
   hiddenTypes: new Set(), nodeFilter: "", showLabels: true,
   jmxBlob: null, jmxText: "",
   view: { x: 20, y: 20, k: 1 },
@@ -11,28 +12,29 @@ const state = {
 };
 
 const LIGHT_EDGE = {
-  url: "#0369a1", header: "#6d28d9", queryparam: "#047857",
-  cookie: "#b45309", bodyue: "#be185d", bodyjson: "#1d4ed8",
+  url: "#0284c7", header: "#7c3aed", queryparam: "#059669",
+  cookie: "#d97706", bodyue: "#db2777", bodyjson: "#2563eb",
 };
 const DARK_EDGE = {
-  url: "#a78bfa", header: "#c084fc", queryparam: "#4ade80",
-  cookie: "#fbbf24", bodyue: "#f472b6", bodyjson: "#67e8f9",
+  url: "#38bdf8", header: "#c084fc", queryparam: "#34d399",
+  cookie: "#fbbf24", bodyue: "#f472b6", bodyjson: "#60a5fa",
 };
 const LIGHT_METHOD = {
-  GET: "#15803d", POST: "#1d4ed8", PUT: "#b45309",
-  DELETE: "#b91c1c", PATCH: "#6d28d9", HEAD: "#64748b", OPTIONS: "#64748b",
+  GET: "#16a34a", POST: "#2563eb", PUT: "#d97706",
+  DELETE: "#dc2626", PATCH: "#9333ea", HEAD: "#475569", OPTIONS: "#475569",
 };
 const DARK_METHOD = {
-  GET: "#4ade80", POST: "#a78bfa", PUT: "#fbbf24",
-  DELETE: "#fb7185", PATCH: "#c084fc", HEAD: "#a79fd1", OPTIONS: "#a79fd1",
+  GET: "#4ade80", POST: "#60a5fa", PUT: "#fbbf24",
+  DELETE: "#f87171", PATCH: "#c084fc", HEAD: "#94a3b8", OPTIONS: "#94a3b8",
 };
 let EDGE_COLORS = { ...LIGHT_EDGE };
 let METHOD_COLORS = { ...LIGHT_METHOD };
+
 /* theme-aware svg text palette */
 function TP() {
   return document.documentElement.dataset.theme === "dark"
-    ? { labelBg: "#1e1832", title: "#f2f0ff", sub: "#a79fd1" }
-    : { labelBg: "#ffffff", title: "#22304a", sub: "#63738c" };
+    ? { labelBg: "#1e1832", labelBorder: "#453a68", title: "#f2f0ff", sub: "#a79fd1" }
+    : { labelBg: "#ffffff", labelBorder: "#d5dce7", title: "#1e293b", sub: "#64748b" };
 }
 function setTheme(t) {
   document.documentElement.dataset.theme = t;
@@ -52,6 +54,11 @@ function gotoStep(n) {
   document.querySelectorAll(".step").forEach((s) => s.classList.toggle("active", Number(s.dataset.step) === n));
   document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
   $("#panel-" + n).classList.add("active");
+  if (n === 2 && state.graph) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => fitView());
+    });
+  }
 }
 
 /* ---------- health + config ---------- */
@@ -145,7 +152,6 @@ $("#useLlm").onchange = (e) => {
   state.useLlm = e.target.checked;
   $("#modePill").textContent = "Mode: " + (state.useLlm ? "LLM" : "LCS");
 };
-
 $("#useEmbedding").onchange = (e) => {
   state.useEmbedding = e.target.checked;
   $("#modePill").textContent = "Mode: " + (state.useEmbedding ? "EMBEDDING" : "LCS");
@@ -170,8 +176,8 @@ $("#buildGraphBtn").onclick = async () => {
     state.graph = j.graph; state.mode = j.mode || (state.useLlm ? "LLM" : "LCS");
     state.pos = {}; state.selected = null; state._fitOnce = false; state._userMoved = {};
     setStatus($("#buildStatus"), `✓ ${j.nodes} nodes · ${j.edges} edges (mode=${state.mode}) — open Step 2`, true);
-    afterGraphLoaded();
     gotoStep(2);
+    afterGraphLoaded();
   } catch (e) { setStatus($("#buildStatus"), "Build failed: " + String(e.message || e).slice(0, 400), false); }
 };
 $("#autoJmxBtn").onclick = async () => {
@@ -208,6 +214,7 @@ function nodeIdxOf(obj) {
 function edgeEndpoints(e) {
   const g = state.graph;
   let from = -1, to = -1;
+  if (!g) return { from, to };
   if (e.from) {
     if (e.from.kind === "csv" || e.from.filename) {
       from = g.nodes.findIndex(
@@ -219,7 +226,6 @@ function edgeEndpoints(e) {
   if (e.to) {
     to = nodeIdxOf(e.to);
     if (to < 0) {
-      // lenient fallback: same endpoint even if HAR indices differ
       to = g.nodes.findIndex(
         (x) => !x.filename && x.request && e.to.request &&
           x.request.method === e.to.request.method && x.request.url === e.to.request.url);
@@ -238,9 +244,6 @@ function edgeVar(e) {
 function isCsvNode(n) {
   return !!(n && (n.kind === "csv" || n.filename));
 }
-/* endpoint nodes only (CSV rows are values, not linkable endpoints).
-   Backend indexes edges over non-CSV nodes, so the dropdown value IS the
-   backend index; the label keeps the canvas id (N<front>) for recognition. */
 function endpointNodes() {
   if (!state.graph) return [];
   const out = [];
@@ -253,9 +256,215 @@ function endpointNodes() {
   return out;
 }
 
-/* ---------- layout: layered DAG (longest-path + barycenter crossing reduction) ---------- */
-const NW = 260, NH = 100, DX = 380, DY = 210;
+/* ---------- layout: Connected-Component Topological DAG with cycle breaking ---------- */
+const NW = 260, NH = 108, DX = 380, DY = 160;
 
+function computeLayout(force = false) {
+  if (force) state.pos = {};
+  if (!state.graph || !state.graph.nodes) return;
+  const nodes = state.graph.nodes, edges = state.graph.edges || [];
+  const n = nodes.length;
+  if (n === 0) return;
+
+  const minIdx = (i) => (nodes[i] && nodes[i].indexs && nodes[i].indexs.length ? nodes[i].indexs[0] : i);
+
+  // 1. Build directed & undirected adjacency
+  const adjUndir = Array.from({ length: n }, () => []);
+  const succ = Array.from({ length: n }, () => []);
+  const pred = Array.from({ length: n }, () => []);
+
+  edges.forEach((e) => {
+    const a = edgeEndpoints(e);
+    if (a.to < 0 || a.to >= n) return;
+    if (a.from >= 0 && a.from < n && a.from !== a.to) {
+      adjUndir[a.from].push(a.to);
+      adjUndir[a.to].push(a.from);
+      succ[a.from].push(a.to);
+      pred[a.to].push(a.from);
+    }
+  });
+
+  // 2. Partition into weakly connected components
+  const visited = new Array(n).fill(false);
+  const components = [];
+  const isolated = [];
+
+  for (let i = 0; i < n; i++) {
+    if (visited[i]) continue;
+    const comp = [];
+    const q = [i];
+    visited[i] = true;
+    while (q.length) {
+      const u = q.shift();
+      comp.push(u);
+      for (const v of adjUndir[u]) {
+        if (!visited[v]) {
+          visited[v] = true;
+          q.push(v);
+        }
+      }
+    }
+    if (comp.length === 1 && succ[comp[0]].length === 0 && pred[comp[0]].length === 0) {
+      isolated.push(comp[0]);
+    } else {
+      components.push(comp);
+    }
+  }
+
+  // Sort components by earliest recording index so flow matches HAR sequence
+  components.forEach((c) => c.sort((a, b) => minIdx(a) - minIdx(b)));
+  components.sort((ca, cb) => minIdx(ca[0]) - minIdx(cb[0]));
+
+  let startY = 60;
+
+  // 3. Layout each component independently
+  components.forEach((comp) => {
+    const compSet = new Set(comp);
+
+    // Intra-component edges
+    const compSucc = {};
+    const compPred = {};
+    comp.forEach((u) => {
+      compSucc[u] = succ[u].filter((v) => compSet.has(v));
+      compPred[u] = pred[u].filter((v) => compSet.has(v));
+    });
+
+    // Cycle-breaking DFS to obtain a DAG
+    const dfsState = {}; // 0 = unvisited, 1 = visiting, 2 = visited
+    const dagSucc = {};
+    const dagPred = {};
+    comp.forEach((u) => { dagSucc[u] = []; dagPred[u] = []; dfsState[u] = 0; });
+
+    const compSorted = comp.slice().sort((a, b) => minIdx(a) - minIdx(b));
+    function dfs(u) {
+      dfsState[u] = 1;
+      for (const v of compSucc[u]) {
+        if (dfsState[v] === 1) {
+          // cycle back-edge! ignore in DAG
+          continue;
+        }
+        dagSucc[u].push(v);
+        dagPred[v].push(u);
+        if (dfsState[v] === 0) dfs(v);
+      }
+      dfsState[u] = 2;
+    }
+    compSorted.forEach((u) => { if (dfsState[u] === 0) dfs(u); });
+
+    // Longest-path layering on DAG
+    const layer = {};
+    comp.forEach((u) => { layer[u] = 0; });
+    const inDeg = {};
+    comp.forEach((u) => { inDeg[u] = dagPred[u].length; });
+    const queue = compSorted.filter((u) => inDeg[u] === 0);
+    if (queue.length === 0 && comp.length > 0) {
+      queue.push(compSorted[0]);
+    }
+
+    while (queue.length) {
+      const u = queue.shift();
+      for (const v of dagSucc[u]) {
+        layer[v] = Math.max(layer[v], layer[u] + 1);
+        inDeg[v]--;
+        if (inDeg[v] === 0) queue.push(v);
+      }
+    }
+
+    // Group nodes by layer
+    const perLayer = {};
+    comp.forEach((u) => {
+      const l = layer[u] || 0;
+      (perLayer[l] = perLayer[l] || []).push(u);
+    });
+
+    const layerKeys = Object.keys(perLayer).map(Number).sort((a, b) => a - b);
+
+    // Barycentric crossing reduction across layers
+    for (let pass = 0; pass < 4; pass++) {
+      for (let idx = 1; idx < layerKeys.length; idx++) {
+        const l = layerKeys[idx];
+        perLayer[l].sort((a, b) => {
+          const pa = compPred[a], pb = compPred[b];
+          const ya = pa.length ? pa.reduce((s, p) => s + (state.pos[p]?.y || 0), 0) / pa.length : 0;
+          const yb = pb.length ? pb.reduce((s, p) => s + (state.pos[p]?.y || 0), 0) / pb.length : 0;
+          return (ya - yb) || (minIdx(a) - minIdx(b));
+        });
+      }
+    }
+
+    // Assign positions within component
+    let compMaxY = startY;
+    layerKeys.forEach((l) => {
+      const arr = perLayer[l];
+      arr.forEach((u, k) => {
+        if (!force && state._userMoved?.[u] && state.pos[u]) return;
+        const parents = compPred[u];
+        let desiredY = startY + k * DY;
+        if (parents.length > 0) {
+          const placed = parents.filter((p) => state.pos[p] !== undefined);
+          if (placed.length > 0) {
+            desiredY = placed.reduce((s, p) => s + state.pos[p].y, 0) / placed.length;
+          }
+        }
+        if (force || !state.pos[u]) {
+          state.pos[u] = { x: 60 + l * DX, y: desiredY };
+        }
+      });
+
+      // Maintain minimum vertical separation within layer
+      const unplaced = arr.filter((u) => force || !state._userMoved?.[u]);
+      unplaced.sort((a, b) => state.pos[a].y - state.pos[b].y);
+      for (let i = 0; i < unplaced.length; i++) {
+        if (i === 0 && state.pos[unplaced[i]].y < startY) {
+          state.pos[unplaced[i]].y = startY;
+        }
+        if (i > 0 && state.pos[unplaced[i]].y < state.pos[unplaced[i - 1]].y + DY) {
+          state.pos[unplaced[i]].y = state.pos[unplaced[i - 1]].y + DY;
+        }
+        compMaxY = Math.max(compMaxY, state.pos[unplaced[i]].y + NH);
+      }
+    });
+
+    startY = compMaxY + 70; // comfortable gap before next component
+  });
+
+  // 4. Isolated nodes grid
+  isolated.sort((a, b) => minIdx(a) - minIdx(b));
+  isolated.forEach((u, idx) => {
+    if (!force && state._userMoved?.[u] && state.pos[u]) return;
+    const col = idx % 3;
+    const row = Math.floor(idx / 3);
+    if (force || !state.pos[u]) {
+      state.pos[u] = { x: 60 + col * DX, y: startY + row * DY };
+    }
+  });
+
+  // 5. Robust de-collision pass across all nodes
+  const allIds = Object.keys(state.pos).map(Number);
+  for (let pass = 0; pass < 8; pass++) {
+    let collided = false;
+    for (let i = 0; i < allIds.length; i++) {
+      for (let j = i + 1; j < allIds.length; j++) {
+        const idA = allIds[i], idB = allIds[j];
+        const pa = state.pos[idA], pb = state.pos[idB];
+        if (!pa || !pb) continue;
+        const dx = Math.abs(pa.x - pb.x);
+        const dy = Math.abs(pa.y - pb.y);
+        if (dx < NW + 40 && dy < NH + 30) {
+          collided = true;
+          if (force || !state._userMoved?.[idB]) {
+            pb.y = pa.y + NH + 40;
+          } else if (!state._userMoved?.[idA]) {
+            pa.y = pb.y + NH + 40;
+          }
+        }
+      }
+    }
+    if (!collided) break;
+  }
+}
+
+/* Cubic bezier point evaluator */
 function cubicAt(x0, y0, x1, y1, x2, y2, x3, y3, t) {
   const u = 1 - t;
   return {
@@ -264,43 +473,107 @@ function cubicAt(x0, y0, x1, y1, x2, y2, x3, y3, t) {
   };
 }
 
-/* smooth curve between two ports; back-edges bow downward so direction stays readable.
-   `lane` spreads parallel edges between the same pair (-2,-1,0,1,2...) so they never overlap. */
-function edgeCurve(x1, y1, x2, y2, lane = 0, laneCount = 1) {
-  let cx1, cy1, cx2, cy2;
-  if (x2 - x1 > 40) {
-    // forward edge: fan out vertically, keep horizontal S-curve
-    const spread = lane * 26;
-    y1 += spread; y2 += spread;
-    const c = Math.max(70, (x2 - x1) * 0.5);
-    // add a slight vertical bow for parallel lanes so curves separate in the middle too
-    const bow = lane * 22;
-    cx1 = x1 + c; cy1 = y1 + bow; cx2 = x2 - c; cy2 = y2 - bow;
-  } else {
-    // back-edge / vertical pair: vary bow depth per lane so each arc is visible
-    const bow = 120 + Math.abs(y2 - y1) * 0.25 + Math.abs(lane) * 55 + (laneCount > 1 ? 0 : 0);
-    const dir = 1; // bow downward
-    const side = laneCount > 1 ? lane * 34 : 0;
-    cx1 = x1 + 90 + side; cy1 = y1 + bow * dir; cx2 = x2 - 90 + side; cy2 = y2 + bow * dir;
+/* Smart edge path computation with multi-direction ports, parallel lane spreading,
+   and collision-free staggered labels */
+function computeEdgePath(pFrom, pTo, slot = { lane: 0, count: 1, pos: 0 }, fromNodeIdx, toNodeIdx) {
+  // Self-loop
+  if (fromNodeIdx === toNodeIdx) {
+    const nx = pFrom.x, ny = pFrom.y;
+    const h = 55 + slot.pos * 26;
+    const sx = nx + NW - 45, sy = ny;
+    const ex = nx + 45, ey = ny;
+    const d = `M${sx},${sy} C${sx + 20},${ny - h} ${ex - 20},${ny - h} ${ex},${ey + 3}`;
+    return {
+      d,
+      p0: { x: sx, y: sy },
+      p1: { x: ex, y: ey + 3 },
+      mid: { x: nx + NW / 2, y: ny - h + 10 },
+      fromSide: "top", toSide: "top",
+    };
   }
+
+  const laneOffset = slot.lane * 16;
+  let fromSide, toSide, x1, y1, x2, y2, n1, n2;
+
+  // Primary direction evaluation
+  if (pTo.x >= pFrom.x + NW - 30) {
+    // Flowing left to right (standard forward DAG)
+    fromSide = "right"; toSide = "left";
+    x1 = pFrom.x + NW;
+    y1 = Math.max(pFrom.y + 20, Math.min(pFrom.y + NH - 20, pFrom.y + NH / 2 + laneOffset));
+    x2 = pTo.x;
+    y2 = Math.max(pTo.y + 20, Math.min(pTo.y + NH - 20, pTo.y + NH / 2 + laneOffset));
+    n1 = { x: 1, y: 0 }; n2 = { x: -1, y: 0 };
+  } else if (pFrom.x >= pTo.x + NW - 30) {
+    // Flowing right to left (feedback/backward edge)
+    fromSide = "left"; toSide = "right";
+    x1 = pFrom.x;
+    y1 = Math.max(pFrom.y + 20, Math.min(pFrom.y + NH - 20, pFrom.y + NH / 2 + laneOffset));
+    x2 = pTo.x + NW;
+    y2 = Math.max(pTo.y + 20, Math.min(pTo.y + NH - 20, pTo.y + NH / 2 + laneOffset));
+    n1 = { x: -1, y: 0 }; n2 = { x: 1, y: 0 };
+  } else if (pTo.y >= pFrom.y + NH - 20) {
+    // Flowing top to bottom (same column or near-vertical)
+    fromSide = "bottom"; toSide = "top";
+    x1 = Math.max(pFrom.x + 24, Math.min(pFrom.x + NW - 24, pFrom.x + NW / 2 + laneOffset));
+    y1 = pFrom.y + NH;
+    x2 = Math.max(pTo.x + 24, Math.min(pTo.x + NW - 24, pTo.x + NW / 2 + laneOffset));
+    y2 = pTo.y;
+    n1 = { x: 0, y: 1 }; n2 = { x: 0, y: -1 };
+  } else if (pFrom.y >= pTo.y + NH - 20) {
+    // Flowing bottom to top
+    fromSide = "top"; toSide = "bottom";
+    x1 = Math.max(pFrom.x + 24, Math.min(pFrom.x + NW - 24, pFrom.x + NW / 2 + laneOffset));
+    y1 = pFrom.y;
+    x2 = Math.max(pTo.x + 24, Math.min(pTo.x + NW - 24, pTo.x + NW / 2 + laneOffset));
+    y2 = pTo.y + NH;
+    n1 = { x: 0, y: -1 }; n2 = { x: 0, y: 1 };
+  } else {
+    // Overlapping or diagonal
+    fromSide = "right"; toSide = "left";
+    x1 = pFrom.x + NW; y1 = pFrom.y + NH / 2;
+    x2 = pTo.x; y2 = pTo.y + NH / 2;
+    n1 = { x: 1, y: 0 }; n2 = { x: -1, y: 0 };
+  }
+
+  // Back up endpoint slightly along normal so the marker arrowhead sits flush outside the card
+  const stopDist = 5;
+  const x2_draw = x2 + n2.x * stopDist;
+  const y2_draw = y2 + n2.y * stopDist;
+
+  const dist = Math.hypot(x2_draw - x1, y2_draw - y1) || 1;
+  const tension = Math.min(180, Math.max(45, dist * 0.42));
+  const bow = slot.lane * 22;
+  const perpX = -(y2_draw - y1) / dist;
+  const perpY = (x2_draw - x1) / dist;
+
+  const cx1 = x1 + n1.x * tension + perpX * bow;
+  const cy1 = y1 + n1.y * tension + perpY * bow;
+  const cx2 = x2_draw + n2.x * tension + perpX * bow;
+  const cy2 = y2_draw + n2.y * tension + perpY * bow;
+
+  // Stagger label along the curve so parallel labels never overlap
+  const t = slot.count > 1 ? (0.35 + slot.pos * (0.3 / Math.max(1, slot.count - 1))) : 0.5;
+  const mid = cubicAt(x1, y1, cx1, cy1, cx2, cy2, x2_draw, y2_draw, t);
+
   return {
-    d: `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`,
-    mid: cubicAt(x1, y1, cx1, cy1, cx2, cy2, x2, y2, 0.5),
+    d: `M${x1.toFixed(1)},${y1.toFixed(1)} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${x2_draw.toFixed(1)},${y2_draw.toFixed(1)}`,
     p0: { x: x1, y: y1 },
+    p1: { x: x2_draw, y: y2_draw },
+    mid,
+    fromSide, toSide,
   };
 }
 
-/* group visible edges by directed pair so parallel edges can be spread into lanes */
+/* Group visible edges by directed pair so parallel edges are spread into lanes */
 function buildPairLanes(list) {
-  // list: [{e, id, from, to}]
   const groups = {};
   list.forEach((it) => {
     const key = it.from + "→" + it.to;
     (groups[key] = groups[key] || []).push(it);
   });
-  const slotOf = {}; // edge id -> {lane, count}
+  const slotOf = {};
   Object.values(groups).forEach((arr) => {
-    // stable order: by type then key so lanes are deterministic
     arr.sort((a, b) => String(a.e.type).localeCompare(String(b.e.type)) || (a.id - b.id));
     const m = arr.length;
     arr.forEach((it, k) => {
@@ -308,103 +581,6 @@ function buildPairLanes(list) {
     });
   });
   return slotOf;
-}
-
-function computeLayout(force = false) {
-  if (force) state.pos = {};
-  const nodes = state.graph.nodes, edges = state.graph.edges || [];
-  const n = nodes.length;
-  const succ = nodes.map(() => []), pred = nodes.map(() => []);
-  const hasAny = new Array(n).fill(false);
-  edges.forEach((e) => {
-    const a = edgeEndpoints(e);
-    if (a.to < 0 || a.to >= n) return;
-    hasAny[a.to] = true;
-    if (a.from >= 0 && a.from < n) {
-      hasAny[a.from] = true;
-      if (a.from !== a.to) { succ[a.from].push(a.to); pred[a.to].push(a.from); }
-    }
-  });
-  const minIdx = (i) => (nodes[i].indexs && nodes[i].indexs.length ? nodes[i].indexs[0] : 1e9);
-  // longest-path layering
-  const indeg = pred.map((p) => p.length);
-  const layer = new Array(n).fill(-1);
-  const queue = [];
-  for (let i = 0; i < n; i++) if (indeg[i] === 0) { queue.push(i); layer[i] = 0; }
-  while (queue.length) {
-    queue.sort((a, b) => minIdx(a) - minIdx(b));
-    const u = queue.shift();
-    for (const v of succ[u]) {
-      if (layer[v] < layer[u] + 1) layer[v] = layer[u] + 1;
-      if (--indeg[v] === 0) queue.push(v);
-    }
-  }
-  let maxL = Math.max(0, ...layer);
-  const leftover = [];
-  for (let i = 0; i < n; i++) if (layer[i] < 0) leftover.push(i);
-  leftover.sort((a, b) => minIdx(a) - minIdx(b));
-  leftover.forEach((v, k) => { layer[v] = maxL + 1 + k; });
-  // order within layers: recording order, then barycenter sweeps to reduce crossings
-  const perLayer = {};
-  for (let i = 0; i < n; i++) {
-    if (!hasAny[i]) continue;
-    (perLayer[layer[i]] = perLayer[layer[i]] || []).push(i);
-  }
-  const orderPos = {};
-  const setOrder = () => Object.entries(perLayer).forEach(([l, arr]) => arr.forEach((v, k) => (orderPos[v] = k)));
-  const bary = (v, nbs) => {
-    const xs = nbs.filter((u) => orderPos[u] !== undefined).map((u) => orderPos[u]);
-    if (!xs.length) return orderPos[v] ?? 0;
-    return xs.reduce((s, x) => s + x, 0) / xs.length;
-  };
-  Object.values(perLayer).forEach((arr) => arr.sort((a, b) => minIdx(a) - minIdx(b)));
-  const Ls = Object.keys(perLayer).map(Number).sort((a, b) => a - b);
-  for (let it = 0; it < 8; it++) {
-    setOrder();
-    for (const l of Ls.slice(1)) perLayer[l].sort((a, b) => (bary(a, pred[a]) - bary(b, pred[b])) || (minIdx(a) - minIdx(b)));
-    setOrder();
-    for (const l of Ls.slice().reverse().slice(1)) perLayer[l].sort((a, b) => (bary(a, succ[a]) - bary(b, succ[b])) || (minIdx(a) - minIdx(b)));
-  }
-  // compact layers: drop empty columns left by cycle leftovers so the graph stays wide-open, not stretched
-  const compact = {};
-  Ls.forEach((l, ni) => { compact[l] = ni; });
-  const maxCount = Math.max(1, ...Object.values(perLayer).map((a) => a.length));
-  Object.entries(perLayer).forEach(([l, arr]) => {
-    const nl = compact[Number(l)];
-    const offY = ((maxCount - arr.length) * DY) / 2;
-    arr.forEach((v, k) => {
-      if (force || !state.pos[v]) state.pos[v] = { x: 60 + nl * DX, y: 60 + offY + k * DY };
-    });
-  });
-  // isolated nodes: tidy grid below the main flow
-  const iso = [];
-  for (let i = 0; i < n; i++) if (!hasAny[i]) iso.push(i);
-  iso.sort((a, b) => minIdx(a) - minIdx(b));
-  const mainBottom = 60 + maxCount * DY;
-  iso.forEach((v, k) => {
-    if (force || !state.pos[v]) state.pos[v] = { x: 60 + (k % 3) * DX, y: mainBottom + 60 + Math.floor(k / 3) * DY };
-  });
-  // final de-collision: nudge apart any two cards that still share (nearly) the same center
-  // (can happen with dense cycles / re-imported graphs). Deterministic, keeps drag positions otherwise.
-  const placed = Object.keys(state.pos).map(Number);
-  for (let pass = 0; pass < 5; pass++) {
-    let moved = false;
-    for (let a = 0; a < placed.length; a++) {
-      for (let b = a + 1; b < placed.length; b++) {
-        const pa = state.pos[placed[a]], pb = state.pos[placed[b]];
-        if (!pa || !pb) continue;
-        const dx = Math.abs(pa.x - pb.x), dy = Math.abs(pa.y - pb.y);
-        if (dx < NW + 40 && dy < NH + 40) {
-          // push the later node down until free
-          if (force || !state._userMoved?.[placed[b]]) {
-            const ny = pa.y + NH + 60;
-            if (pb.y < ny) { pb.y = ny; moved = true; }
-          }
-        }
-      }
-    }
-    if (!moved) break;
-  }
 }
 
 /* ---------- render SVG ---------- */
@@ -421,12 +597,9 @@ function afterGraphLoaded() {
   $("#graphStats").textContent = `${state.graph.nodes.length} endpoints · ${state.graph.edges.length} dependencies`;
   $("#emptyGraph").style.display = state.graph.nodes.length ? "none" : "grid";
   renderLegend(); render();
-  // defer fit until the panel is actually visible, so svg.clientWidth is real
-  // and the whole graph opens up readable on first view (no manual dragging needed)
-  if (!state._fitOnce) {
-    state._fitOnce = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => fitView()));
-  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => fitView());
+  });
   refreshEdgesTable(); refreshAddEdgeNodeOptions(); updateConfirmSummary();
 }
 function autoLayout() {
@@ -452,21 +625,112 @@ function visibleNode(i) {
   return ((r.method || "") + " " + (r.url || "")).toLowerCase().includes(state.nodeFilter);
 }
 
+/* Dynamic updates for connected edges while dragging a node */
+function updateConnectedEdges(nodeIdx) {
+  const vp = svg.querySelector("#viewport");
+  if (!vp || !state.graph) return;
+  const typeFilter = $("#edgeTypeFilter").value;
+  const _visList = [];
+  (state.graph.edges || []).forEach((e, id) => {
+    if (typeFilter && e.type !== typeFilter) return;
+    if (state.hiddenTypes.has(e.type)) return;
+    const { from, to } = edgeEndpoints(e);
+    if (to < 0 || !state.pos[to] || !visibleNode(to)) return;
+    if (from < 0 || !state.pos[from] || !visibleNode(from)) return;
+    if (from === nodeIdx || to === nodeIdx) {
+      _visList.push({ e, id, from, to });
+    }
+  });
+  const slotOf = buildPairLanes(_visList);
+  _visList.forEach(({ e, id, from, to }) => {
+    const g = vp.querySelector(`.edge-g[data-id="${id}"]`);
+    if (!g) return;
+    const slot = slotOf[id] || { lane: 0, count: 1, pos: 0 };
+    const c = computeEdgePath(state.pos[from], state.pos[to], slot, from, to);
+    const hit = g.querySelector(".edge-hit");
+    const edge = g.querySelector(".edge");
+    const dot = g.querySelector("circle");
+    const lbl = g.querySelector(".edge-label-g");
+    if (hit) hit.setAttribute("d", c.d);
+    if (edge) edge.setAttribute("d", c.d);
+    if (dot) { dot.setAttribute("cx", c.p0.x); dot.setAttribute("cy", c.p0.y); }
+    if (lbl) lbl.setAttribute("transform", `translate(${c.mid.x},${c.mid.y})`);
+  });
+}
+
+/* Neighborhood and focus highlighting for analytics */
+function updateHighlights() {
+  const vp = svg.querySelector("#viewport");
+  if (!vp) return;
+  vp.classList.remove("graph-dimmed");
+  vp.querySelectorAll(".highlighted, .producer, .consumer, .focus").forEach((elem) => {
+    elem.classList.remove("highlighted", "producer", "consumer", "focus");
+  });
+
+  const activeFocus = state.hovered || state.selected;
+  if (!activeFocus) return;
+
+  vp.classList.add("graph-dimmed");
+
+  if (activeFocus.kind === "node") {
+    const nIdx = activeFocus.id;
+    const nElem = vp.querySelector(`.node-card[data-id="${nIdx}"]`);
+    if (nElem) nElem.classList.add("highlighted", "focus");
+
+    // highlight incoming & outgoing edges
+    (state.graph.edges || []).forEach((e, edgeId) => {
+      const { from, to } = edgeEndpoints(e);
+      const eg = vp.querySelector(`.edge-g[data-id="${edgeId}"]`);
+      if (to === nIdx) {
+        if (eg) eg.classList.add("highlighted", "incoming");
+        const prod = vp.querySelector(`.node-card[data-id="${from}"]`);
+        if (prod) prod.classList.add("highlighted", "producer");
+      }
+      if (from === nIdx) {
+        if (eg) eg.classList.add("highlighted", "outgoing");
+        const cons = vp.querySelector(`.node-card[data-id="${to}"]`);
+        if (cons) cons.classList.add("highlighted", "consumer");
+      }
+    });
+  } else if (activeFocus.kind === "edge") {
+    const edgeId = activeFocus.id;
+    const eg = vp.querySelector(`.edge-g[data-id="${edgeId}"]`);
+    if (eg) eg.classList.add("highlighted");
+    const e = state.graph.edges[edgeId];
+    if (e) {
+      const { from, to } = edgeEndpoints(e);
+      const prod = vp.querySelector(`.node-card[data-id="${from}"]`);
+      const cons = vp.querySelector(`.node-card[data-id="${to}"]`);
+      if (prod) prod.classList.add("highlighted", "producer");
+      if (cons) cons.classList.add("highlighted", "consumer");
+    }
+  }
+}
+
 function render() {
   svg.innerHTML = "";
   if (!state.graph || !state.graph.nodes.length) return;
   computeLayout();
   const vp = el("g", { id: "viewport", transform: `translate(${state.view.x},${state.view.y}) scale(${state.view.k})` }, svg);
-  // defs: arrow markers per type
+
+  // defs: marker arrowheads per edge type
   const defs = el("defs", {}, vp);
   Object.entries(EDGE_COLORS).forEach(([t, c]) => {
-    const m = el("marker", { id: "arr-" + t, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
-    el("path", { d: "M0,0 L10,5 L0,10 z", fill: c }, m);
+    const m = el("marker", {
+      id: "arr-" + t,
+      viewBox: "0 0 10 10",
+      refX: 8,
+      refY: 5,
+      markerWidth: 7,
+      markerHeight: 7,
+      orient: "auto"
+    }, defs);
+    el("path", { d: "M 0 1.5 L 8 5 L 0 8.5 z", fill: c }, m);
   });
 
   const typeFilter = $("#edgeTypeFilter").value;
 
-  // edges under the node cards — parallel edges between the same pair get spread into lanes
+  // Filter visible edges
   const _visList = [];
   (state.graph.edges || []).forEach((e, id) => {
     if (typeFilter && e.type !== typeFilter) return;
@@ -476,55 +740,61 @@ function render() {
     if (from < 0 || !state.pos[from] || !visibleNode(from)) return;
     _visList.push({ e, id, from, to });
   });
+
   const slotOf = buildPairLanes(_visList);
+
+  // Render edges
   _visList.forEach(({ e, id, from, to }) => {
     const color = EDGE_COLORS[e.type] || "#888";
     const sel = state.selected?.kind === "edge" && state.selected.id === id;
     const slot = slotOf[id] || { lane: 0, count: 1, pos: 0 };
-    let d, p0, lx, ly;
-    if (from === to) {
-      // self-loops: stack arcs above the node, one height per parallel edge
-      const nx = state.pos[to].x, ny = state.pos[to].y;
-      const h = 85 + slot.pos * 30;
-      const sx = nx + NW - 50, ex = nx + 50;
-      d = `M${sx},${ny} C${sx + 50},${ny - h} ${ex - 50},${ny - h} ${ex},${ny}`;
-      p0 = { x: sx, y: ny };
-      lx = nx + NW / 2; ly = ny - h + 12 + slot.pos * 2;
-    } else {
-      // stop before the target border so the arrowhead is never covered by the card
-      const x2 = state.pos[to].x - 12, y2 = state.pos[to].y + NH / 2;
-      const x1 = state.pos[from].x + NW + 4, y1 = state.pos[from].y + NH / 2;
-      const c = edgeCurve(x1, y1, x2, y2, slot.lane, slot.count);
-      d = c.d; p0 = c.p0; lx = c.mid.x; ly = c.mid.y - 16 + slot.lane * 14;
-    }
-    const g = el("g", { class: "edge-g" }, vp);
-    el("path", { d, class: "edge-hit", "data-id": id }, g);
-    el("circle", { cx: p0.x, cy: p0.y, r: 3, fill: color }, g);
+    const c = computeEdgePath(state.pos[from], state.pos[to], slot, from, to);
+
+    const g = el("g", { class: "edge-g" + (sel ? " selected" : ""), "data-id": id }, vp);
+    el("path", { d: c.d, class: "edge-hit", "data-id": id }, g);
+    el("circle", { cx: c.p0.x, cy: c.p0.y, r: 3.5, fill: color }, g);
     el("path", {
-      d, class: "edge" + (sel ? " selected" : ""),
+      d: c.d, class: "edge" + (sel ? " selected" : ""),
       stroke: color, "stroke-width": sel ? 3.4 : 2.2,
       "marker-end": `url(#arr-${e.type})`,
     }, g);
+
     if (state.showLabels || sel) {
-      const lbl = el("g", { transform: `translate(${lx},${ly})`, style: "pointer-events:none" }, g);
+      const lbl = el("g", { class: "edge-label-g", transform: `translate(${c.mid.x},${c.mid.y})` }, g);
       const txt = `${e.type}:${edgeKey(e)}`.slice(0, 26);
-      el("rect", { x: -txt.length * 3.4 - 7, y: -10, width: txt.length * 6.8 + 14, height: 20, rx: 10, fill: TP().labelBg, stroke: color, "stroke-width": 1.2 }, lbl);
+      const boxW = txt.length * 6.8 + 16;
+      el("rect", {
+        x: -boxW / 2, y: -10, width: boxW, height: 20, rx: 10,
+        fill: TP().labelBg, stroke: color, "stroke-width": 1.3
+      }, lbl);
       const te = el("text", { y: 4, "text-anchor": "middle", fill: color, "font-size": 10.5, "font-weight": 700 }, lbl);
       te.textContent = txt;
+      lbl.onclick = (ev) => { ev.stopPropagation(); select("edge", id); };
     }
-    g.addEventListener("mouseenter", (ev) => showEdgeTip(ev, e, id, from, to));
+
+    g.addEventListener("mouseenter", (ev) => {
+      state.hovered = { kind: "edge", id };
+      updateHighlights();
+      showEdgeTip(ev, e, id, from, to);
+    });
     g.addEventListener("mousemove", moveTip);
-    g.addEventListener("mouseleave", hideTip);
+    g.addEventListener("mouseleave", () => {
+      state.hovered = null;
+      updateHighlights();
+      hideTip();
+    });
     g.addEventListener("click", (ev) => { ev.stopPropagation(); select("edge", id); });
   });
 
-  // nodes
+  // Calculate in/out degree stats per node
   const edgeStats = {};
   (state.graph.edges || []).forEach((x) => {
     const a = edgeEndpoints(x);
-    if (a.to >= 0) edgeStats[a.to] = edgeStats[a.to] || { in: 0, out: 0 }, edgeStats[a.to].in++;
-    if (a.from >= 0) edgeStats[a.from] = edgeStats[a.from] || { in: 0, out: 0 }, edgeStats[a.from].out++;
+    if (a.to >= 0) { edgeStats[a.to] = edgeStats[a.to] || { in: 0, out: 0 }; edgeStats[a.to].in++; }
+    if (a.from >= 0) { edgeStats[a.from] = edgeStats[a.from] || { in: 0, out: 0 }; edgeStats[a.from].out++; }
   });
+
+  // Render nodes
   state.graph.nodes.forEach((n, i) => {
     if (!visibleNode(i)) return;
     const p = state.pos[i];
@@ -534,35 +804,58 @@ function render() {
     const method = r.method || (isCsv ? "CSV" : "?");
     const mc = isCsv ? "#b45309" : (METHOD_COLORS[method] || "#64748b");
     const st = edgeStats[i] || { in: 0, out: 0 };
+    const sel = state.selected?.kind === "node" && state.selected.id === i;
+
     const g = el("g", {
-      class: "node-card" + (state.selected?.kind === "node" && state.selected.id === i ? " selected" : "") + (isCsv ? " csv" : ""),
+      class: "node-card" + (sel ? " selected" : "") + (isCsv ? " csv" : ""),
       transform: `translate(${p.x},${p.y})`, "data-id": i,
     }, vp);
+
     el("rect", { class: "body", width: NW, height: NH, rx: 15 }, g);
-    el("rect", { x: 2, y: 9, width: 5, height: NH - 18, rx: 2.5, fill: mc }, g); // accent bar
-    // method pill
+    el("rect", { x: 2, y: 10, width: 5, height: NH - 20, rx: 2.5, fill: mc }, g); // accent bar
+
+    // Method pill
     const bw = Math.max(58, method.length * 8.5 + 18);
-    el("rect", { x: 18, y: 13, width: bw, height: 23, rx: 11.5, fill: mc }, g);
-    const mt = el("text", { x: 18 + bw / 2, y: 29, "text-anchor": "middle", "font-size": 11.5, "font-weight": 800, fill: "#ffffff" }, g);
+    el("rect", { x: 18, y: 13, width: bw, height: 22, rx: 11, fill: mc }, g);
+    const mt = el("text", { x: 18 + bw / 2, y: 28.5, "text-anchor": "middle", "font-size": 11.5, "font-weight": 800, fill: "#ffffff" }, g);
     mt.textContent = method;
-    const idxT = el("text", { x: NW - 14, y: 29, "text-anchor": "end", "font-size": 11, "font-weight": 700, fill: TP().sub }, g);
+
+    // Node index
+    const idxT = el("text", { x: NW - 14, y: 29, "text-anchor": "end", "font-size": 11.5, "font-weight": 800, fill: TP().sub }, g);
     idxT.textContent = "N" + i;
-    const pathT = el("text", { x: 18, y: 61, "font-size": 13, "font-weight": 700, fill: TP().title }, g);
+
+    // Path / Title
+    const pathT = el("text", { x: 18, y: 58, "font-size": 13, "font-weight": 700, fill: TP().title }, g);
     pathT.textContent = isCsv
       ? ("📄 " + String(n.filename || "csv").split("/").pop()).slice(0, 28)
       : shortPath(r.url || "").slice(0, 30);
-    const hostT = el("text", { x: 18, y: 79, "font-size": 11, fill: TP().sub }, g);
+
+    // Host & Indices
+    const hostT = el("text", { x: 18, y: 77, "font-size": 11, fill: TP().sub }, g);
     const q = (r.queryParams || []).length, h = (r.headers || []).length;
     hostT.textContent = isCsv
       ? `vars=${(n.variablesName || "").slice(0, 28)}`
-      : `${hostOf(r.url || "").slice(0, 30)} · idx=${(n.indexs || []).join(",") || "—"} · H${h}/Q${q}`;
-    const stT = el("text", { x: 18, y: 94, "font-size": 10.5, fill: TP().sub }, g);
+      : `${hostOf(r.url || "").slice(0, 28)} · idx=${(n.indexs || []).join(",") || "—"} · H${h}/Q${q}`;
+
+    // Dependencies in/out counter
+    const stT = el("text", { x: 18, y: 95, "font-size": 11, "font-weight": 600, fill: TP().sub }, g);
     stT.textContent = `↓ ${st.in} in · ↑ ${st.out} out`;
-    g.addEventListener("mouseenter", (ev) => showNodeTip(ev, n, i));
+
+    // Interactive Hover & Focus
+    g.addEventListener("mouseenter", (ev) => {
+      state.hovered = { kind: "node", id: i };
+      updateHighlights();
+      showNodeTip(ev, n, i);
+    });
     g.addEventListener("mousemove", moveTip);
-    g.addEventListener("mouseleave", hideTip);
+    g.addEventListener("mouseleave", () => {
+      state.hovered = null;
+      updateHighlights();
+      hideTip();
+    });
     g.addEventListener("click", (ev) => { ev.stopPropagation(); select("node", i); });
-    // drag node
+
+    // Smooth Drag with Live Edge Tracking
     g.addEventListener("mousedown", (ev) => {
       ev.stopPropagation();
       const start = svgPoint(ev);
@@ -570,15 +863,16 @@ function render() {
       let dragged = false;
       const mv = (e2) => {
         const pt = svgPoint(e2);
-        if (Math.hypot(pt.x - start.x, pt.y - start.y) < 4) return; // plain click, not a drag
+        if (Math.hypot(pt.x - start.x, pt.y - start.y) < 4) return;
         dragged = true;
         p.x = ox + (pt.x - start.x) / state.view.k;
         p.y = oy + (pt.y - start.y) / state.view.k;
         g.setAttribute("transform", `translate(${p.x},${p.y})`);
+        updateConnectedEdges(i);
       };
       const up = () => {
         window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up);
-        if (!dragged) return; // let the click event select the node instead of wiping the DOM
+        if (!dragged) return;
         state._userMoved = state._userMoved || {};
         state._userMoved[i] = true;
         render();
@@ -586,6 +880,8 @@ function render() {
       window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up);
     });
   });
+
+  // Canvas pan by background drag
   svg.onmousedown = (ev) => {
     if (ev.target === svg) {
       const sx = ev.clientX, sy = ev.clientY, ox = state.view.x, oy = state.view.y;
@@ -594,49 +890,88 @@ function render() {
       window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up);
     }
   };
+
+  // Cursor-centered smooth mouse-wheel zoom
   svg.onwheel = (ev) => {
     ev.preventDefault();
-    state.view.k = Math.min(2.5, Math.max(0.3, state.view.k * (ev.deltaY < 0 ? 1.1 : 0.9)));
+    const factor = ev.deltaY < 0 ? 1.12 : 0.89;
+    const newK = Math.min(3.0, Math.max(0.15, state.view.k * factor));
+    const pt = svgPoint(ev);
+    state.view.x = pt.x - (pt.x - state.view.x) * (newK / state.view.k);
+    state.view.y = pt.y - (pt.y - state.view.y) * (newK / state.view.k);
+    state.view.k = newK;
     applyView();
   };
+
   svg.onclick = () => select(null);
+  updateHighlights();
 }
+
 function applyView() {
   const vp = svg.querySelector("#viewport");
   if (vp) vp.setAttribute("transform", `translate(${state.view.x},${state.view.y}) scale(${state.view.k})`);
 }
+
 function fitView() {
   const ids = Object.keys(state.pos);
   if (!ids.length || !state.graph) return;
-  // svg may report 0 size while its panel is hidden — fall back to the visible wrapper
   const wrap = document.querySelector(".canvas-wrap");
   const W = (svg.clientWidth || (wrap && wrap.clientWidth) || 900);
-  const H = (svg.clientHeight || 560);
+  const H = (svg.clientHeight || (wrap && wrap.clientHeight) || 600);
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   ids.forEach((k) => {
     const p = state.pos[k];
     if (!p) return;
-    // include self-loop arcs above the card in the fitted bounds
-    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y - 130);
-    x1 = Math.max(x1, p.x + NW); y1 = Math.max(y1, p.y + NH);
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y - 70);
+    x1 = Math.max(x1, p.x + NW); y1 = Math.max(y1, p.y + NH + 20);
   });
-  const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
-  const k = Math.max(0.15, Math.min(1.15, Math.min((W - 80) / bw, (H - 80) / bh)));
+  const padding = 60;
+  const bw = Math.max(1, (x1 - x0) + padding * 2);
+  const bh = Math.max(1, (y1 - y0) + padding * 2);
+  const k = Math.max(0.18, Math.min(1.2, Math.min(W / bw, H / bh)));
   state.view.k = k;
-  state.view.x = (W - bw * k) / 2 - x0 * k;
-  state.view.y = (H - bh * k) / 2 - y0 * k;
+  state.view.x = (W - (x1 - x0) * k) / 2 - x0 * k;
+  state.view.y = (H - (y1 - y0) * k) / 2 - y0 * k;
   applyView();
 }
+
+function zoomStep(factor) {
+  const wrap = document.querySelector(".canvas-wrap");
+  const W = (svg.clientWidth || (wrap && wrap.clientWidth) || 900);
+  const H = (svg.clientHeight || (wrap && wrap.clientHeight) || 600);
+  const cx = W / 2, cy = H / 2;
+  const newK = Math.min(3.0, Math.max(0.15, state.view.k * factor));
+  state.view.x = cx - (cx - state.view.x) * (newK / state.view.k);
+  state.view.y = cy - (cy - state.view.y) * (newK / state.view.k);
+  state.view.k = newK;
+  applyView();
+}
+
 function svgPoint(ev) {
   const r = svg.getBoundingClientRect();
   return { x: ev.clientX - r.left, y: ev.clientY - r.top };
 }
+
+// Toolbar & canvas zoom controls
 $("#fitBtn").onclick = () => fitView();
+$("#ctrlFit") && ($("#ctrlFit").onclick = () => fitView());
 $("#layoutBtn").onclick = () => autoLayout();
-$("#resetZoomBtn").onclick = () => { state.view.k = 1; applyView(); };
+$("#resetZoomBtn").onclick = () => { state.view.k = 1; fitView(); };
+$("#ctrlReset") && ($("#ctrlReset").onclick = () => { state.view.k = 1; fitView(); });
+$("#zoomInBtn") && ($("#zoomInBtn").onclick = () => zoomStep(1.25));
+$("#ctrlZoomIn") && ($("#ctrlZoomIn").onclick = () => zoomStep(1.25));
+$("#zoomOutBtn") && ($("#zoomOutBtn").onclick = () => zoomStep(0.8));
+$("#ctrlZoomOut") && ($("#ctrlZoomOut").onclick = () => zoomStep(0.8));
 $("#nodeSearch").oninput = (e) => { state.nodeFilter = e.target.value.toLowerCase(); render(); };
 $("#edgeTypeFilter").onchange = () => render();
 $("#labelsBtn").onclick = () => { state.showLabels = !state.showLabels; $("#labelsBtn").classList.toggle("active", state.showLabels); render(); };
+
+// Window resize listener to keep canvas readable
+window.addEventListener("resize", () => {
+  if (state.graph && $("#panel-2").classList.contains("active")) {
+    fitView();
+  }
+});
 
 /* ---------- tooltip ---------- */
 const tip = $("#tooltip");
@@ -649,7 +984,8 @@ function showNodeTip(ev, n, i) {
     <b>HAR indices:</b> ${(n.indexs || []).join(", ") || "—"}<br/>
     <b>headers:</b> ${(r.headers || []).length} · <b>query:</b> ${(r.queryParams || []).length} · <b>cookies:</b> ${(r.cookies || []).length}<br/>
     <b>body:</b> ${r.postData ? ((r.postData.mimeType || "") + " " + ((r.postData.text || "").slice(0, 60))) : "—"}<br/>
-    <b>edges:</b> ${deps} incoming · ${outs} outgoing<br/><span class="muted">click to select · drag to move</span>`;
+    <b>edges:</b> <span style="color:#10b981;font-weight:700">↓ ${deps} incoming</span> · <span style="color:#6366f1;font-weight:700">↑ ${outs} outgoing</span><br/>
+    <span class="muted">click to inspect · drag to move</span>`;
   tip.classList.remove("hidden"); moveTip(ev);
 }
 function showEdgeTip(ev, e, id, from, to) {
@@ -659,7 +995,8 @@ function showEdgeTip(ev, e, id, from, to) {
     <b>variable:</b> ${edgeVar(e)}<br/>
     <b>value:</b> ${(d.value || "").toString().slice(0, 90) || "—"}<br/>
     <b>xpath:</b> ${d.xpath || "—"} · <b>from_set_cookie:</b> ${d.from_set_cookie ?? "—"}<br/>
-    <b>har idx:</b> ${e.from_index} → ${e.to_index} · <b>primitive:</b> ${e.primitive}<br/><span class="muted">click to select / edit / delete</span>`;
+    <b>har idx:</b> ${e.from_index} → ${e.to_index} · <b>primitive:</b> ${e.primitive}<br/>
+    <span class="muted">click to edit / delete</span>`;
   tip.classList.remove("hidden"); moveTip(ev);
 }
 function moveTip(ev) {
@@ -736,6 +1073,7 @@ async function refreshEdgesTable() {
     box.appendChild(d);
   });
 }
+
 /* ---------- add-edge form: node dropdowns + per-mode validation ---------- */
 function aeFrontOf(backIdx) {
   const ep = endpointNodes();
@@ -761,14 +1099,12 @@ function refreshAddEdgeNodeOptions() {
       o2.value = String(x.back); o2.textContent = x.label;
       toSel.appendChild(o2);
     });
-    // sensible defaults: first node as producer, second (or first) as consumer
     fromSel.value = [...fromSel.options].some((o) => o.value === prevFrom) ? prevFrom : String(eps[0].back);
     toSel.value = [...toSel.options].some((o) => o.value === prevTo) ? prevTo : String(eps[Math.min(1, eps.length - 1)].back);
   }
   syncAeHarIdx(); updateAeModeUI(); updateAeHint();
 }
 function syncAeHarIdx() {
-  // prefill HAR occurrence indices from the chosen nodes so from/to_index match the graph
   const eps = endpointNodes();
   const fb = Number($("#ae_from")?.value), tb = Number($("#ae_to")?.value);
   const f = eps.find((x) => x.back === fb), t = eps.find((x) => x.back === tb);
@@ -865,7 +1201,6 @@ $("#addEdgeForm").onsubmit = async (ev) => {
   if (!r.ok) return setStatus($("#addEdgeStatus"), "Add failed: " + (await r.text()).slice(0, 300), false);
   const j = await r.json();
   state.graph = j.graph;
-  // make sure the new edge is not hidden by toolbar filters, then highlight it
   const newId = (j.edge && typeof j.edge.id === "number") ? j.edge.id : j.edges - 1;
   state.hiddenTypes.delete(type);
   const tf = $("#edgeTypeFilter");
