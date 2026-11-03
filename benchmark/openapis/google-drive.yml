@@ -1,0 +1,296 @@
+openapi: 3.2.0
+info:
+  title: Google Drive Files API
+  description: The Google Drive API allows developers to integrate with Google Drive to create, read, update, and delete files and folders stored in Google Drive. The v3 REST API supports file metadata operations, content upload and download, folder hierarchies, sharing and permissions, and search across a user's Drive.
+  version: v3
+  contact:
+    name: Google
+    url: https://developers.google.com/drive
+servers:
+- url: https://www.googleapis.com/drive/v3
+  description: Google Drive REST API v3 base URL
+tags:
+- name: Files
+paths:
+  /files:
+    get:
+      operationId: listFiles
+      summary: List files
+      description: Lists the user's files. Supports query parameters for filtering, ordering, paging, and selecting fields to return.
+      parameters:
+      - name: q
+        in: query
+        required: false
+        description: Query string for searching files.
+        schema:
+          type: string
+      - name: pageSize
+        in: query
+        required: false
+        description: Maximum number of files to return per page.
+        schema:
+          type: integer
+          default: 100
+      - name: pageToken
+        in: query
+        required: false
+        description: Token for continuing a previous list request.
+        schema:
+          type: string
+      - name: fields
+        in: query
+        required: false
+        description: Selector specifying which fields to include in a response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful response containing a list of files.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileList'
+      tags:
+      - Files
+    post:
+      operationId: createFile
+      summary: Create a file
+      description: Creates a new file in Google Drive. For uploading file content use the upload endpoint; this endpoint creates metadata-only files such as folders or shortcuts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/File'
+      responses:
+        '200':
+          description: The created file metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+      tags:
+      - Files
+  /files/{fileId}:
+    get:
+      operationId: getFile
+      summary: Get a file
+      description: Gets a file's metadata or content by ID.
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        description: The ID of the file.
+        schema:
+          type: string
+      - name: fields
+        in: query
+        required: false
+        description: Selector specifying which fields to include in a response.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: The file metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+      tags:
+      - Files
+    patch:
+      operationId: updateFile
+      summary: Update a file
+      description: Updates a file's metadata and/or content.
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        description: The ID of the file.
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/File'
+      responses:
+        '200':
+          description: The updated file metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+      tags:
+      - Files
+    delete:
+      operationId: deleteFile
+      summary: Delete a file
+      description: Permanently deletes a file owned by the user without moving it to the trash.
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        description: The ID of the file.
+        schema:
+          type: string
+      responses:
+        '204':
+          description: File deleted successfully.
+      tags:
+      - Files
+  /files/{fileId}/copy:
+    post:
+      operationId: copyFile
+      summary: Copy a file
+      description: Creates a copy of a file and applies any requested updates with patch semantics.
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        description: The ID of the file to copy.
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/File'
+      responses:
+        '200':
+          description: The metadata of the copied file.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+      tags:
+      - Files
+  /files/{fileId}/permissions:
+    get:
+      operationId: listPermissions
+      summary: List permissions
+      description: Lists a file's or shared drive's permissions.
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        description: The ID of the file.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List of permissions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionList'
+      tags:
+      - Files
+    post:
+      operationId: createPermission
+      summary: Create a permission
+      description: Creates a permission for a file or shared drive.
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        description: The ID of the file.
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Permission'
+      responses:
+        '200':
+          description: The created permission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Permission'
+      tags:
+      - Files
+components:
+  schemas:
+    PermissionList:
+      type: object
+      description: A list of permissions for a file or shared drive.
+      properties:
+        nextPageToken:
+          type: string
+          description: Token to retrieve the next page of results.
+        permissions:
+          type: array
+          description: The list of permissions.
+          items:
+            $ref: '#/components/schemas/Permission'
+    Permission:
+      type: object
+      description: A permission for a file or shared drive.
+      properties:
+        id:
+          type: string
+          description: The ID of the permission.
+        type:
+          type: string
+          description: The type of grantee (user, group, domain, anyone).
+        role:
+          type: string
+          description: The role granted by this permission (owner, organizer, fileOrganizer, writer, commenter, reader).
+        emailAddress:
+          type: string
+          description: The email address of the grantee, if applicable.
+        domain:
+          type: string
+          description: The domain to which the permission applies, if applicable.
+    File:
+      type: object
+      description: A file resource representing a file or folder in Google Drive.
+      properties:
+        id:
+          type: string
+          description: The ID of the file.
+        name:
+          type: string
+          description: The name of the file.
+        mimeType:
+          type: string
+          description: The MIME type of the file.
+        parents:
+          type: array
+          description: The IDs of the parent folders containing the file.
+          items:
+            type: string
+        createdTime:
+          type: string
+          format: date-time
+          description: The time at which the file was created.
+        modifiedTime:
+          type: string
+          format: date-time
+          description: The last time the file was modified.
+        size:
+          type: string
+          description: The size of the file's content in bytes.
+        trashed:
+          type: boolean
+          description: Whether the file has been trashed.
+        webViewLink:
+          type: string
+          description: A link for opening the file in the relevant Google editor or viewer.
+    FileList:
+      type: object
+      description: A list of files returned from the files.list endpoint.
+      properties:
+        nextPageToken:
+          type: string
+          description: Token to retrieve the next page of results.
+        files:
+          type: array
+          description: The list of files.
+          items:
+            $ref: '#/components/schemas/File'
