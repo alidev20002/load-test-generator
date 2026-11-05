@@ -1,0 +1,1702 @@
+[
+  {
+    "id": "GEN_00001_spotify_semantic_match_lexical_mismatch_header",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/tracks",
+      "field": "ids",
+      "value": "2982"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/audio-features",
+      "field": "trackIds",
+      "value": "2982",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00002_spotify_semantic_lexical_match_queryparam",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/shows",
+      "field": "show_id",
+      "value": "5061"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/shows/episodes?showId=5061",
+      "field": "showId",
+      "value": "5061",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00003_gitlab_semantic_lexical_mismatch_body",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/alert_management_alerts/metric_images",
+      "field": "metric_image_id",
+      "value": "4681"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/applications",
+      "field": "redirect_uri",
+      "value": "4681",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00004_google-drive_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "name",
+      "value": "evbLJoLoaeTOdoe5c3veGprQ"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/sessions?refresh_token=evbLJoLoaeTOdoe5c3veGprQ",
+      "field": "refresh_token",
+      "value": "evbLJoLoaeTOdoe5c3veGprQ",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00005_spotify_semantic_lexical_match_queryparam",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/artists",
+      "field": "artistId",
+      "value": "8953"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/artists/albums?artist_id=8953",
+      "field": "artist_id",
+      "value": "8953",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00006_spotify_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/recommendations/available-genre-seeds",
+      "field": "genres",
+      "value": "nIiU74KKEpYE"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/top/type/nIiU74KKEpYE",
+      "field": "type",
+      "value": "nIiU74KKEpYE",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00007_gitlab_semantic_match_lexical_mismatch_queryparam",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/repository/branches",
+      "field": "search",
+      "value": "ZAmggQBwBAD3"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/groups/badges?query=ZAmggQBwBAD3",
+      "field": "query",
+      "value": "ZAmggQBwBAD3",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00008_spotify_semantic_lexical_match_queryparam",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/tracks",
+      "field": "snapshot_id",
+      "value": "UdRPPgdzUvZ3gpmmICiBlrDp"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/items?snapshotId=UdRPPgdzUvZ3gpmmICiBlrDp",
+      "field": "snapshotId",
+      "value": "UdRPPgdzUvZ3gpmmICiBlrDp",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00009_spotify_semantic_lexical_match_body",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/tracks",
+      "field": "snapshot_id",
+      "value": "37eCZ32JgdPI1af7W2pkAFEn"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/items",
+      "field": "snapshotId",
+      "value": "37eCZ32JgdPI1af7W2pkAFEn",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00010_spotify_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/volume",
+      "field": "volume_percent",
+      "value": "6571"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/top/limit/6571",
+      "field": "limit",
+      "value": "6571",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00011_google-drive_semantic_lexical_match_header",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/auth/login",
+      "field": "jwt",
+      "value": "5dkyayq7YYDs.BS9UYJQTFjmsn9dLVIdV.uddLEG62Hkd9Gf2l"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/export",
+      "field": "jwt",
+      "value": "5dkyayq7YYDs.BS9UYJQTFjmsn9dLVIdV.uddLEG62Hkd9Gf2l",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00012_gitlab_lexical_match_semantic_mismatch_header",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/repository/branches/protect",
+      "field": "developers_can_push",
+      "value": true
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/repository/branches/protect",
+      "field": "developers_can_merge",
+      "value": true,
+      "location": "header"
+    },
+    "note": "Generated from project catalog: gitlab/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00013_spotify_semantic_match_lexical_mismatch_cookie",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/tracks",
+      "field": "id",
+      "value": "2113"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/audio-analysis",
+      "field": "track_id",
+      "value": "2113",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00014_google-drive_semantic_match_lexical_mismatch_queryparam",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "id",
+      "value": "4853"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions?documentRef=4853",
+      "field": "documentRef",
+      "value": "4853",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00015_google-drive_semantic_match_lexical_mismatch_cookie",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "size",
+      "value": "6616"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/quota",
+      "field": "byteCount",
+      "value": "6616",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00016_google-drive_lexical_match_semantic_mismatch_body",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "name",
+      "value": "h84KpLMcNfAQ"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/groups",
+      "field": "name",
+      "value": "h84KpLMcNfAQ",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00017_spotify_semantic_match_lexical_mismatch_header",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/tracks",
+      "field": "id",
+      "value": "9565"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/audio-analysis",
+      "field": "track_id",
+      "value": "9565",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00018_google-drive_semantic_match_lexical_mismatch_cookie",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "id",
+      "value": "6183"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "documentRef",
+      "value": "6183",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00019_spotify_semantic_match_lexical_mismatch_header",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/devices",
+      "field": "id",
+      "value": "5272"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/volume",
+      "field": "dev_id",
+      "value": "5272",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00020_spotify_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/browse/categories",
+      "field": "category_id",
+      "value": "4346"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/volume/device_id/4346",
+      "field": "device_id",
+      "value": "4346",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00021_google-drive_semantic_lexical_match_cookie",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/folders",
+      "field": "folder_id",
+      "value": "6147"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "parent_folder_id",
+      "value": "6147",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00022_google-drive_lexical_match_semantic_mismatch_body",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "size",
+      "value": "3911"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "pageSize",
+      "value": "3911",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00023_google-drive_semantic_match_lexical_mismatch_url",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "trashed",
+      "value": false
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/restore/isDeleted/false",
+      "field": "isDeleted",
+      "value": false,
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00024_spotify_semantic_match_lexical_mismatch_queryparam",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/albums",
+      "field": "id",
+      "value": "7484"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/albums/tracks?album_id=7484",
+      "field": "album_id",
+      "value": "7484",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00025_spotify_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/artists",
+      "field": "popularity",
+      "value": "2145"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/browse/categories?offset=2145",
+      "field": "offset",
+      "value": "2145",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00026_google-drive_semantic_match_lexical_mismatch_queryparam",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/auth/login",
+      "field": "accessToken",
+      "value": "QPtDu7W7eaDN.KgeInGqi7w4e4pxskC1I.TtNZPHaQ0Jt7Qg84"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files?bearerCredential=QPtDu7W7eaDN.KgeInGqi7w4e4pxskC1I.TtNZPHaQ0Jt7Qg84",
+      "field": "bearerCredential",
+      "value": "QPtDu7W7eaDN.KgeInGqi7w4e4pxskC1I.TtNZPHaQ0Jt7Qg84",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00027_google-drive_semantic_lexical_match_header",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/users",
+      "field": "user-id",
+      "value": "3200"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "user-id",
+      "value": "3200",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00028_spotify_semantic_lexical_match_header",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/shows",
+      "field": "show_id",
+      "value": "5333"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/shows/episodes",
+      "field": "showId",
+      "value": "5333",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00029_spotify_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/episodes",
+      "field": "episodeId",
+      "value": "2891"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/audiobooks/chapters?chapterId=2891",
+      "field": "chapterId",
+      "value": "2891",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00030_gitlab_semantic_match_lexical_mismatch_header",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/jobs",
+      "field": "token",
+      "value": "4gVJjrsMnTvn.RO2qGFq562dfOB1rcavX.iOqkVCJTBJahe84S"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/clusters",
+      "field": "api_credential",
+      "value": "4gVJjrsMnTvn.RO2qGFq562dfOB1rcavX.iOqkVCJTBJahe84S",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00031_gitlab_semantic_match_lexical_mismatch_body",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/badges",
+      "field": "name",
+      "value": "5jIc1xLJjBic"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/groups/badges",
+      "field": "badge_title",
+      "value": "5jIc1xLJjBic",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00032_spotify_semantic_lexical_match_url",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/artists",
+      "field": "artistId",
+      "value": "6050"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/artists/albums/artist_id/6050",
+      "field": "artist_id",
+      "value": "6050",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00033_google-drive_lexical_match_semantic_mismatch_queryparam",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "trashed",
+      "value": false
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions?trashedNotifications=false",
+      "field": "trashedNotifications",
+      "value": false,
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00034_spotify_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/tracks",
+      "field": "snapshot_id",
+      "value": "57Y3c5wnRpQgwXJ43ANVj77p"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/albums/tracks/album_id/57Y3c5wnRpQgwXJ43ANVj77p",
+      "field": "album_id",
+      "value": "57Y3c5wnRpQgwXJ43ANVj77p",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00035_spotify_semantic_match_lexical_mismatch_queryparam",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/playlists",
+      "field": "owner_id",
+      "value": "3662"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/users?userId=3662",
+      "field": "userId",
+      "value": "3662",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00036_gitlab_lexical_match_semantic_mismatch_cookie",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/broadcast_messages",
+      "field": "starts_at",
+      "value": "ZZl4AblV7vY7"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/broadcast_messages",
+      "field": "ends_at",
+      "value": "ZZl4AblV7vY7",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: gitlab/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00037_spotify_lexical_match_semantic_mismatch_queryparam",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/shuffle",
+      "field": "state",
+      "value": "AZQ3VZprkYSg"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/repeat?state=AZQ3VZprkYSg",
+      "field": "state",
+      "value": "AZQ3VZprkYSg",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00038_gitlab_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/clusters/add",
+      "field": "management_project_id",
+      "value": "7267"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/bulk_imports/status/7267",
+      "field": "status",
+      "value": "7267",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00039_gitlab_semantic_lexical_mismatch_cookie",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/clusters/add",
+      "field": "management_project_id",
+      "value": "1634"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/bulk_imports",
+      "field": "status",
+      "value": "1634",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00040_spotify_semantic_lexical_mismatch_header",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/me",
+      "field": "access_token",
+      "value": "2Eom06Dwt0Y3.oobQmzvr3e9XrwPGzR1I.v8bh4qlL9qcgMBwU"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/items",
+      "field": "snapshot_id",
+      "value": "2Eom06Dwt0Y3.oobQmzvr3e9XrwPGzR1I.v8bh4qlL9qcgMBwU",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00041_spotify_lexical_match_semantic_mismatch_url",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/shuffle",
+      "field": "state",
+      "value": "YuBMGhy5Kmqc"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/repeat/state/YuBMGhy5Kmqc",
+      "field": "state",
+      "value": "YuBMGhy5Kmqc",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00042_google-drive_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "webViewLink",
+      "value": "7145"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/users?age=7145",
+      "field": "age",
+      "value": "7145",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00043_google-drive_lexical_match_semantic_mismatch_header",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "role",
+      "value": "28"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/users",
+      "field": "roleCount",
+      "value": "28",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00044_google-drive_semantic_lexical_match_url",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/users",
+      "field": "user-id",
+      "value": "9518"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions/user-id/9518",
+      "field": "user-id",
+      "value": "9518",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00045_google-drive_semantic_match_lexical_mismatch_cookie",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "createdTime",
+      "value": "7ZIRU8VVQmxB"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/reports/activity",
+      "field": "startTimestamp",
+      "value": "7ZIRU8VVQmxB",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00046_spotify_semantic_match_lexical_mismatch_body",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/users",
+      "field": "user_id",
+      "value": "2146"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/users/playlists",
+      "field": "uid",
+      "value": "2146",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00047_gitlab_semantic_lexical_match_queryparam",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/badges",
+      "field": "link_url",
+      "value": "8Q6vNuQ2hU5t"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/badges/render?link-url=8Q6vNuQ2hU5t",
+      "field": "link-url",
+      "value": "8Q6vNuQ2hU5t",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00048_google-drive_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/copy",
+      "field": "id",
+      "value": false
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/settings/darkMode/false",
+      "field": "darkMode",
+      "value": false,
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00049_google-drive_semantic_lexical_mismatch_cookie",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "role",
+      "value": "QAuzSsJimAQ8"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/export",
+      "field": "format",
+      "value": "QAuzSsJimAQ8",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00050_google-drive_lexical_match_semantic_mismatch_header",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "parents",
+      "value": "yRV5lNKtzJ1a"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/users/guardians",
+      "field": "parentEmail",
+      "value": "yRV5lNKtzJ1a",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00051_google-drive_semantic_match_lexical_mismatch_url",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "size",
+      "value": "4979"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/quota/byteCount/4979",
+      "field": "byteCount",
+      "value": "4979",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00052_google-drive_lexical_match_semantic_mismatch_url",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "trashed",
+      "value": false
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions/trashedNotifications/false",
+      "field": "trashedNotifications",
+      "value": false,
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00053_google-drive_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "createdTime",
+      "value": "3444"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/billing?invoiceNumber=3444",
+      "field": "invoiceNumber",
+      "value": "3444",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00054_google-drive_lexical_match_semantic_mismatch_body",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "mimeType",
+      "value": "BYLMPuDCCRnG"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/emails",
+      "field": "mimeType",
+      "value": "BYLMPuDCCRnG",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00055_google-drive_semantic_lexical_mismatch_cookie",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "webViewLink",
+      "value": "7753"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/users",
+      "field": "age",
+      "value": "7753",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00056_gitlab_lexical_match_semantic_mismatch_body",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/broadcast_messages",
+      "field": "starts_at",
+      "value": "Y59YVkQfsGQO"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/broadcast_messages",
+      "field": "ends_at",
+      "value": "Y59YVkQfsGQO",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: gitlab/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00057_spotify_semantic_lexical_match_body",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/artists",
+      "field": "artistId",
+      "value": "6491"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/artists/albums",
+      "field": "artist_id",
+      "value": "6491",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00058_google-drive_lexical_match_semantic_mismatch_body",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "trashed",
+      "value": true
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "trashedNotifications",
+      "value": true,
+      "location": "body"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00059_gitlab_semantic_lexical_mismatch_header",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/repository/branches",
+      "field": "regex",
+      "value": "08WpRtoZmjbc"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/clusters",
+      "field": "namespace_per_environment",
+      "value": "08WpRtoZmjbc",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00060_google-drive_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "trashed",
+      "value": "pEN2XeDA4OKm"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/auth/login?password=pEN2XeDA4OKm",
+      "field": "password",
+      "value": "pEN2XeDA4OKm",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00061_spotify_semantic_lexical_match_body",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/shows",
+      "field": "show_id",
+      "value": "7291"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/shows/episodes",
+      "field": "showId",
+      "value": "7291",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00062_google-drive_semantic_lexical_match_body",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "permissionId",
+      "value": "9099"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions/update",
+      "field": "permissionId",
+      "value": "9099",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00063_gitlab_semantic_match_lexical_mismatch_url",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/groups/access_requests",
+      "field": "per_page",
+      "value": "6548"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/badges/limit/6548",
+      "field": "limit",
+      "value": "6548",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00064_spotify_semantic_lexical_mismatch_body",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/tracks",
+      "field": "snapshot_id",
+      "value": "pjPSa5W3X4gXBolZ9SHDdJp6"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/albums/tracks",
+      "field": "album_id",
+      "value": "pjPSa5W3X4gXBolZ9SHDdJp6",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00065_google-drive_semantic_match_lexical_mismatch_cookie",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "role",
+      "value": "2hDiZDQHJMu8"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/shares",
+      "field": "accessLevel",
+      "value": "2hDiZDQHJMu8",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00066_google-drive_lexical_match_semantic_mismatch_cookie",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "size",
+      "value": "7252"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "pageSize",
+      "value": "7252",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00067_gitlab_semantic_match_lexical_mismatch_queryparam",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/groups/access_requests",
+      "field": "per_page",
+      "value": "8271"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/badges?limit=8271",
+      "field": "limit",
+      "value": "8271",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00068_gitlab_semantic_lexical_match_body",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/badges",
+      "field": "link_url",
+      "value": "B16JC5kV3ECq"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/badges/render",
+      "field": "link-url",
+      "value": "B16JC5kV3ECq",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00069_google-drive_semantic_lexical_mismatch_body",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "nextPageToken",
+      "value": "Wp1OrXXHFOpr"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "emailAddress",
+      "value": "Wp1OrXXHFOpr",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00070_gitlab_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/repository/branches",
+      "field": "regex",
+      "value": "CeTsprvu5Ifi"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/clusters?namespace_per_environment=CeTsprvu5Ifi",
+      "field": "namespace_per_environment",
+      "value": "CeTsprvu5Ifi",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00071_spotify_semantic_lexical_match_body",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/tracks",
+      "field": "PlaylistId",
+      "value": "3471"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/images",
+      "field": "playlist_id",
+      "value": "3471",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00072_spotify_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/tracks",
+      "field": "duration_ms",
+      "value": "3789"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/tracks?limit=3789",
+      "field": "limit",
+      "value": "3789",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00073_google-drive_semantic_match_lexical_mismatch_header",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "id",
+      "value": "7275"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "documentRef",
+      "value": "7275",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00074_google-drive_lexical_match_semantic_mismatch_queryparam",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "size",
+      "value": "2504"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files?pageSize=2504",
+      "field": "pageSize",
+      "value": "2504",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00075_google-drive_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "role",
+      "value": "TneAAvIDAdn1"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/export/format/TneAAvIDAdn1",
+      "field": "format",
+      "value": "TneAAvIDAdn1",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00076_gitlab_semantic_match_lexical_mismatch_body",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/clusters/add",
+      "field": "platform_kubernetes_token",
+      "value": "Ay5XL8Sb24WKyEa8wtWy2591"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/ci/variables",
+      "field": "cluster_secret_value",
+      "value": "Ay5XL8Sb24WKyEa8wtWy2591",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00077_gitlab_semantic_match_lexical_mismatch_body",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/repository/branches",
+      "field": "search",
+      "value": "AIVVIZM5oFor"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/groups/badges",
+      "field": "query",
+      "value": "AIVVIZM5oFor",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00078_google-drive_semantic_match_lexical_mismatch_url",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "emailAddress",
+      "value": "BFbyvQRZzUk1"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/shares/recipientMail/BFbyvQRZzUk1",
+      "field": "recipientMail",
+      "value": "BFbyvQRZzUk1",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00079_google-drive_semantic_lexical_mismatch_queryparam",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/copy",
+      "field": "id",
+      "value": false
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/settings?darkMode=false",
+      "field": "darkMode",
+      "value": false,
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00080_spotify_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/seek",
+      "field": "position_ms",
+      "value": "2092"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/tracks/market/2092",
+      "field": "market",
+      "value": "2092",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00081_google-drive_semantic_lexical_match_cookie",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/auth/login",
+      "field": "jwt",
+      "value": "NIb6zLKQbfPB.i3DldqyunDuvW4yrW81A.q1fEbVId8woPeX9P"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/export",
+      "field": "jwt",
+      "value": "NIb6zLKQbfPB.i3DldqyunDuvW4yrW81A.q1fEbVId8woPeX9P",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00082_spotify_semantic_lexical_mismatch_body",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/audio-features",
+      "field": "tempo",
+      "value": "660"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/volume",
+      "field": "volume_percent",
+      "value": "660",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00083_spotify_semantic_lexical_match_cookie",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/shows",
+      "field": "show_id",
+      "value": "1508"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/shows/episodes",
+      "field": "showId",
+      "value": "1508",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00084_google-drive_semantic_lexical_match_url",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "permissionId",
+      "value": "5051"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions/update/permissionId/5051",
+      "field": "permissionId",
+      "value": "5051",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00085_google-drive_semantic_match_lexical_mismatch_url",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "createdTime",
+      "value": "m1bNjpiEQhK8"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/reports/activity/startTimestamp/m1bNjpiEQhK8",
+      "field": "startTimestamp",
+      "value": "m1bNjpiEQhK8",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00086_google-drive_semantic_lexical_match_cookie",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/copy",
+      "field": "copiedFileId",
+      "value": "4571"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/trash",
+      "field": "copiedFileId",
+      "value": "4571",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00087_google-drive_semantic_lexical_mismatch_header",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "webViewLink",
+      "value": "7620"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/users",
+      "field": "age",
+      "value": "7620",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00088_spotify_semantic_lexical_mismatch_header",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/artists",
+      "field": "popularity",
+      "value": "4199"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/browse/categories",
+      "field": "offset",
+      "value": "4199",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00089_spotify_semantic_match_lexical_mismatch_url",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/users",
+      "field": "user_id",
+      "value": "7043"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/users/playlists/uid/7043",
+      "field": "uid",
+      "value": "7043",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00090_gitlab_semantic_match_lexical_mismatch_url",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/jobs",
+      "field": "token",
+      "value": "kMM9VThX0k9t.gLb7tKR69yz8TmeLS1Op.gSXt2RMZhYKYcwIB"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/admin/clusters/api_credential/kMM9VThX0k9t.gLb7tKR69yz8TmeLS1Op.gSXt2RMZhYKYcwIB",
+      "field": "api_credential",
+      "value": "kMM9VThX0k9t.gLb7tKR69yz8TmeLS1Op.gSXt2RMZhYKYcwIB",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00091_google-drive_semantic_match_lexical_mismatch_header",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/sessions",
+      "field": "session_uuid",
+      "value": "8186a576-11a7-4609-9edd-bbbfa9597663"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/upload",
+      "field": "uploadRef",
+      "value": "8186a576-11a7-4609-9edd-bbbfa9597663",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00092_spotify_semantic_lexical_mismatch_cookie",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/me",
+      "field": "display_name",
+      "value": "Pva2A0FgB9xO"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/search",
+      "field": "q",
+      "value": "Pva2A0FgB9xO",
+      "location": "cookie"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00093_google-drive_lexical_match_semantic_mismatch_url",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "name",
+      "value": "51DTjBlUH9Pr"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/groups/name/51DTjBlUH9Pr",
+      "field": "name",
+      "value": "51DTjBlUH9Pr",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00094_google-drive_lexical_match_semantic_mismatch_header",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "trashed",
+      "value": false
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "trashedNotifications",
+      "value": false,
+      "location": "header"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00095_spotify_semantic_lexical_mismatch_url",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/playlists/images",
+      "field": "url",
+      "value": "DB0ULru2p17f"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/player/play/context_uri/DB0ULru2p17f",
+      "field": "context_uri",
+      "value": "DB0ULru2p17f",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00096_spotify_semantic_lexical_match_queryparam",
+    "pattern": "semantic_lexical_match",
+    "producer": {
+      "endpoint": "https://api.spotify.com/v1/chapters",
+      "field": "chapter_id",
+      "value": "5569"
+    },
+    "consumer": {
+      "endpoint": "https://api.spotify.com/v1/me/audiobooks/contains?chapter_ids=5569",
+      "field": "chapter_ids",
+      "value": "5569",
+      "location": "queryparam"
+    },
+    "note": "Generated from project catalog: spotify/semantic_lexical_match",
+    "ground_truth": true
+  },
+  {
+    "id": "GEN_00097_google-drive_lexical_match_semantic_mismatch_url",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/auth/login",
+      "field": "tokenType",
+      "value": "4CpWDKNQyvbF"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/pageToken/4CpWDKNQyvbF",
+      "field": "pageToken",
+      "value": "4CpWDKNQyvbF",
+      "location": "url"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00098_google-drive_lexical_match_semantic_mismatch_body",
+    "pattern": "lexical_match_semantic_mismatch",
+    "producer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files",
+      "field": "webViewLink",
+      "value": "5326"
+    },
+    "consumer": {
+      "endpoint": "https://www.googleapis.com/drive/v3/files/permissions",
+      "field": "viewLinkCount",
+      "value": "5326",
+      "location": "body"
+    },
+    "note": "Generated from project catalog: google-drive/lexical_match_semantic_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00099_gitlab_semantic_lexical_mismatch_header",
+    "pattern": "semantic_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/application/plan_limits",
+      "field": "ci_active_jobs",
+      "value": "2980"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/projects/repository/branches",
+      "field": "sort",
+      "value": "2980",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_lexical_mismatch",
+    "ground_truth": false
+  },
+  {
+    "id": "GEN_00100_gitlab_semantic_match_lexical_mismatch_header",
+    "pattern": "semantic_match_lexical_mismatch",
+    "producer": {
+      "endpoint": "https://www.gitlab.com/api/v4/application/plan_limits",
+      "field": "plan_name",
+      "value": "FnwZqvr4MS4r"
+    },
+    "consumer": {
+      "endpoint": "https://www.gitlab.com/api/v4/metadata",
+      "field": "tier_title",
+      "value": "FnwZqvr4MS4r",
+      "location": "header"
+    },
+    "note": "Generated from project catalog: gitlab/semantic_match_lexical_mismatch",
+    "ground_truth": true
+  }
+]
