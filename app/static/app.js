@@ -7,6 +7,7 @@ const state = {
   hiddenTypes: new Set(), nodeFilter: "", showLabels: true,
   jmxBlob: null, jmxText: "",
   building: false, // true while POST /graphs/build is in flight
+  jmxRunning: false, // true while POST /jmx/build is in flight
   view: { x: 20, y: 20, k: 1 },
   pos: {}, // nodeIdx -> {x,y}
   _userMoved: {}, // nodeIdx -> true (dragged by user, excluded from auto de-collision)
@@ -171,7 +172,29 @@ const BUILD_STAGES = [
   "Matching field-level dependencies…",
   "Finalizing graph…",
 ];
-let _buildStageTimer = null;
+const JMX_LABEL = "🚀 Build JMX script";
+const JMX_STAGES = [
+  "Reading recorded requests…",
+  "Planning thread groups & timers…",
+  "Wiring extractors between steps…",
+  "Writing the JMX script…",
+];
+const _stageTimers = {}; // stage element -> interval id
+
+// cycles the caption under the spinner while a build is in flight
+function cycleStages(stageSel, stages, on) {
+  clearInterval(_stageTimers[stageSel]);
+  delete _stageTimers[stageSel];
+  const stage = $(stageSel);
+  if (!stage) return;
+  if (!on) { stage.textContent = stages[0]; return; }
+  let i = 0;
+  stage.textContent = stages[0];
+  _stageTimers[stageSel] = setInterval(() => {
+    i = Math.min(i + 1, stages.length - 1);
+    stage.textContent = stages[i];
+  }, 1600);
+}
 
 function setBuildBusy(on) {
   state.building = !!on;
@@ -191,22 +214,28 @@ function setBuildBusy(on) {
     .forEach((sel) => { const el = $(sel); if (el) el.disabled = !!on; });
   document.querySelectorAll("#workloadRows .icon-btn").forEach((b) => { b.disabled = !!on; });
 
-  clearInterval(_buildStageTimer);
-  const stage = $("#buildStage");
-  if (on) {
-    let i = 0;
-    stage.textContent = BUILD_STAGES[0];
-    _buildStageTimer = setInterval(() => {
-      i = Math.min(i + 1, BUILD_STAGES.length - 1);
-      stage.textContent = BUILD_STAGES[i];
-    }, 1600);
-  } else {
-    stage.textContent = BUILD_STAGES[0];
-  }
+  cycleStages("#buildStage", BUILD_STAGES, on);
+}
+
+function setJmxBusy(on) {
+  state.jmxRunning = !!on;
+  const panel = $("#panel-3");
+  panel.classList.toggle("busy", !!on);
+  panel.setAttribute("aria-busy", on ? "true" : "false");
+  $("#jmxOverlay").classList.toggle("hidden", !on);
+
+  const btn = $("#buildJmxBtn");
+  btn.disabled = !!on;
+  btn.innerHTML = on
+    ? `<span class="btn-spinner" aria-hidden="true"></span>Generating JMX…`
+    : JMX_LABEL;
+  $("#downloadJmxBtn").disabled = !!on || !state.jmxBlob;
+
+  cycleStages("#jmxStage", JMX_STAGES, on);
 }
 
 $("#buildGraphBtn").onclick = async () => {
-  if (state.building) return;
+  if (state.building || state.jmxRunning) return;
   if (!state.harFile) return setStatus($("#buildStatus"), "Select a HAR file first.", false);
   setBuildBusy(true);
   setStatus($("#buildStatus"), "Building graph… POST /graphs/build", null);
@@ -227,6 +256,7 @@ $("#buildGraphBtn").onclick = async () => {
   finally { setBuildBusy(false); }
 };
 $("#autoJmxBtn").onclick = async () => {
+  if (state.jmxRunning || state.building) return;
   if (!state.harFile) return setStatus($("#buildStatus"), "Select a HAR file first.", false);
   gotoStep(3);
   await buildJmx(true);
@@ -1540,10 +1570,12 @@ function updateConfirmSummary() {
 }
 $("#buildJmxBtn").onclick = () => buildJmx(false);
 async function buildJmx(auto = false) {
+  if (state.jmxRunning) return;
   if (!state.harFile) return setStatus($("#jmxStatus"), "Select a HAR file in Step 1 first.", false);
   if (!state.graph && !auto && !$("#autoGraph").checked)
     return setStatus($("#jmxStatus"), "No graph — build one in Step 2 or enable auto_graph.", false);
-  setStatus($("#jmxStatus"), "Generating… POST /jmx/build", null);
+  setJmxBusy(true);
+  setStatus($("#jmxStatus"), auto ? "Generating JMX directly from the HAR… POST /jmx/build" : "Generating… POST /jmx/build", null);
   const fd = new FormData();
   fd.append("har", state.harFile);
   if (state.graph && !auto) fd.append("graph", new Blob([JSON.stringify(state.graph)], { type: "application/json" }), "graph.json");
@@ -1564,6 +1596,7 @@ async function buildJmx(auto = false) {
     $("#downloadJmxBtn").disabled = false;
     setStatus($("#jmxStatus"), `✓ JMX ready (${(state.jmxText.length / 1024).toFixed(1)} KB) — preview or download`, true);
   } catch (e) { setStatus($("#jmxStatus"), "JMX failed: " + String(e.message || e).slice(0, 400), false); }
+  finally { setJmxBusy(false); }
 }
 $("#downloadJmxBtn").onclick = () => {
   if (!state.jmxBlob) return;
