@@ -72,6 +72,26 @@
       <button class="btn ghost" id="autoJmxBtn" data-tip="Skip the graph editor and generate the JMX directly">Quick JMX</button>
     </div>
     <div id="buildStatus" class="status center"></div>
+
+    <!-- loading state for POST /graphs/build -->
+    <div id="buildOverlay" class="build-overlay hidden" role="status" aria-live="polite" aria-busy="true">
+      <div class="build-card glass">
+        <div class="build-visual" aria-hidden="true">
+          <svg viewBox="0 0 120 80" width="168" height="112">
+            <path class="bo-flow" d="M18 40 H52"/>
+            <path class="bo-flow" d="M68 40 H102"/>
+            <circle class="bo-node" cx="18" cy="40" r="9"/>
+            <circle class="bo-node mid" cx="60" cy="40" r="11"/>
+            <circle class="bo-node end" cx="102" cy="40" r="9"/>
+            <g class="bo-packet"><circle r="4"/></g>
+          </svg>
+        </div>
+        <div class="build-title">Building dependency graph</div>
+        <div class="build-sub" id="buildStage">Uploading HAR capture…</div>
+        <div class="build-bar" aria-hidden="true"><i></i></div>
+        <div class="build-note muted small">Matching fields across every recorded request — this can take a moment.</div>
+      </div>
+    </div>
   </section>
 
   <!-- STEP 2 -->

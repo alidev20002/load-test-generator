@@ -6,6 +6,7 @@ const state = {
   hovered: null, // {kind:'node'|'edge', id}
   hiddenTypes: new Set(), nodeFilter: "", showLabels: true,
   jmxBlob: null, jmxText: "",
+  building: false, // true while POST /graphs/build is in flight
   view: { x: 20, y: 20, k: 1 },
   pos: {}, // nodeIdx -> {x,y}
   _userMoved: {}, // nodeIdx -> true (dragged by user, excluded from auto de-collision)
@@ -162,8 +163,52 @@ function setStatus(el, msg, ok) {
   el.className = "status " + (ok === true ? "ok" : ok === false ? "err" : "");
   el.textContent = msg;
 }
+/* ---------- build loading state ---------- */
+const BUILD_LABEL = "Build dependency graph →";
+const BUILD_STAGES = [
+  "Uploading HAR capture…",
+  "Parsing recorded requests…",
+  "Matching field-level dependencies…",
+  "Finalizing graph…",
+];
+let _buildStageTimer = null;
+
+function setBuildBusy(on) {
+  state.building = !!on;
+  const panel = $("#panel-1");
+  panel.classList.toggle("busy", !!on);
+  panel.setAttribute("aria-busy", on ? "true" : "false");
+  $("#buildOverlay").classList.toggle("hidden", !on);
+
+  const build = $("#buildGraphBtn");
+  build.disabled = !!on;
+  build.innerHTML = on
+    ? `<span class="btn-spinner" aria-hidden="true"></span>Building graph…`
+    : BUILD_LABEL;
+
+  // every other control in Step 1 waits for the API response
+  ["#autoJmxBtn", "#addWorkloadBtn", "#clearHarBtn", "#useLlm", "#useEmbedding", "#autoGraph"]
+    .forEach((sel) => { const el = $(sel); if (el) el.disabled = !!on; });
+  document.querySelectorAll("#workloadRows .icon-btn").forEach((b) => { b.disabled = !!on; });
+
+  clearInterval(_buildStageTimer);
+  const stage = $("#buildStage");
+  if (on) {
+    let i = 0;
+    stage.textContent = BUILD_STAGES[0];
+    _buildStageTimer = setInterval(() => {
+      i = Math.min(i + 1, BUILD_STAGES.length - 1);
+      stage.textContent = BUILD_STAGES[i];
+    }, 1600);
+  } else {
+    stage.textContent = BUILD_STAGES[0];
+  }
+}
+
 $("#buildGraphBtn").onclick = async () => {
+  if (state.building) return;
   if (!state.harFile) return setStatus($("#buildStatus"), "Select a HAR file first.", false);
+  setBuildBusy(true);
   setStatus($("#buildStatus"), "Building graph… POST /graphs/build", null);
   const fd = new FormData();
   fd.append("har", state.harFile);
@@ -179,6 +224,7 @@ $("#buildGraphBtn").onclick = async () => {
     gotoStep(2);
     afterGraphLoaded();
   } catch (e) { setStatus($("#buildStatus"), "Build failed: " + String(e.message || e).slice(0, 400), false); }
+  finally { setBuildBusy(false); }
 };
 $("#autoJmxBtn").onclick = async () => {
   if (!state.harFile) return setStatus($("#buildStatus"), "Select a HAR file first.", false);

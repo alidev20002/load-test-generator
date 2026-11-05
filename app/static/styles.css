@@ -191,3 +191,37 @@ footer{margin-top:14px}
 .s1-options{gap:8px}
 .info{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--info-bg);color:var(--muted);font-size:11px;font-style:normal;font-weight:800;cursor:help}
 .s1-actions{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+
+/* ---------- build loading state (step 1) ---------- */
+#panel-1{position:relative}
+#panel-1.busy .grid2,
+#panel-1.busy .s1-actions{opacity:.45;pointer-events:none;filter:saturate(.5);transition:opacity .25s,filter .25s}
+.build-overlay{position:absolute;inset:0;z-index:40;display:grid;place-items:center;padding:20px;border-radius:var(--radius);background:rgba(233,237,243,.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:bo-fade .22s ease-out both;cursor:progress}
+[data-theme="dark"] .build-overlay{background:rgba(16,13,26,.74)}
+.build-overlay.hidden{display:none}
+.build-card{width:min(430px,94%);padding:28px 26px 22px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;animation:bo-rise .28s cubic-bezier(.2,.8,.3,1) both}
+.build-visual{line-height:0;margin-bottom:6px}
+.build-visual svg{overflow:visible}
+.bo-flow{fill:none;stroke:var(--acc);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:7 7;opacity:.55;animation:bo-dash 1s linear infinite}
+.bo-node{fill:var(--card);stroke:var(--acc);stroke-width:2.5;transform-box:fill-box;transform-origin:center;animation:bo-pulse 1.8s ease-in-out infinite}
+.bo-node.mid{animation-delay:.18s}
+.bo-node.end{animation-delay:.36s}
+.bo-packet{fill:var(--acc);animation:bo-travel 1.6s cubic-bezier(.5,0,.5,1) infinite}
+.build-title{font-weight:800;font-size:17px;letter-spacing:.2px}
+.build-sub{color:var(--muted);font-size:13px;min-height:20px;margin-top:4px}
+.build-bar{width:100%;height:6px;margin:14px 0 10px;border-radius:999px;background:var(--pill-bg);overflow:hidden}
+.build-bar i{display:block;height:100%;width:45%;border-radius:999px;background:linear-gradient(90deg,transparent,var(--acc),transparent);animation:bo-slide 1.35s ease-in-out infinite}
+.build-note{max-width:320px;line-height:1.5}
+.btn-spinner{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:bo-spin .7s linear infinite}
+@keyframes bo-fade{from{opacity:0}to{opacity:1}}
+@keyframes bo-rise{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes bo-dash{to{stroke-dashoffset:-14}}
+@keyframes bo-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.82);opacity:.55}}
+@keyframes bo-travel{0%{transform:translate(18px,40px);opacity:0}12%{opacity:1}88%{opacity:1}100%{transform:translate(102px,40px);opacity:0}}
+@keyframes bo-slide{0%{transform:translateX(-100%)}100%{transform:translateX(240%)}}
+@keyframes bo-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .build-overlay,.build-card{animation:none}
+  .bo-flow,.bo-node,.bo-packet,.build-bar i,.btn-spinner{animation:none}
+  .bo-packet{opacity:0}
+}
