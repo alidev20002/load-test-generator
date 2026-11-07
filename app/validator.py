@@ -206,9 +206,9 @@ def _embedding_name_match(
         consumer_field=to_name,
         consumer_value=value,
     )
-    if res and score > 0.8:
-        return True
-    if lcs_fallback is not None:
+    if res is not None:
+        return res
+    if config.fallback_to_lcs and lcs_fallback is not None:
         return lcs_fallback()
     return False
 
