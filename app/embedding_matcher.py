@@ -12,8 +12,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-SIMILARITY_THRESHOLD = 0.75
-DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+SIMILARITY_THRESHOLD = 0.6
+DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -51,8 +51,8 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.split())
 
 
-def _normalize_endpoint(endpoint: str) -> str:
-    """Strip HTTP method, host prefix, and query parameters from endpoint URL."""
+def _normalize_endpoint(endpoint: str, field_value: str | None = None) -> str:
+    """Strip HTTP method, host prefix, query parameters and all garbage parts from endpoint URL."""
     cleaned = endpoint.strip()
     cleaned = re.sub(
         r"^\s*(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+",
@@ -71,12 +71,23 @@ def _normalize_endpoint(endpoint: str) -> str:
         cleaned = urlsplit(cleaned).path
 
     cleaned = cleaned.split("?", 1)[0].split("#", 1)[0]
+
+    # Keep only the last non-empty path segment.
+    parts = [part for part in cleaned.split("/") if part]
+    cleaned = parts[-1] if parts else ""
+
+    # Remove field_value if it exactly matches the endpoint segment.
+    if field_value:
+        field_value = str(field_value).strip()
+        if cleaned == field_value:
+            cleaned = parts[-2] if len(parts) > 1 else ""
+
     return _normalize_text(cleaned)
 
 
-def _format_field_context(endpoint: str, field_name: str) -> str:
+def _format_field_context(endpoint: str, field_name: str, field_value: str | None = None) -> str:
     """Format endpoint path and field name into textual prompt for embedding."""
-    return f"API endpoint: {_normalize_endpoint(endpoint)}. Field name: {_normalize_text(field_name)}."
+    return f"API endpoint: {_normalize_endpoint(endpoint, field_value)}. Field name: {_normalize_text(field_name)}."
 
 
 def field_match_embedding(
@@ -87,7 +98,7 @@ def field_match_embedding(
     consumer_value: str = "",
     producer_value: str = "",
     model_name: str = DEFAULT_EMBEDDING_MODEL,
-) -> tuple[bool, float]:
+) -> tuple[bool | None, float]:
     """Compute semantic similarity score between producer and consumer fields."""
     if not _HAS_SENTENCE_TRANSFORMERS:
         logger.debug("sentence-transformers not installed; skipping embedding match.")
@@ -103,7 +114,7 @@ def field_match_embedding(
         model = _load_model(model_name)
         texts = [
             _format_field_context(producer_endpoint, producer_field),
-            _format_field_context(consumer_endpoint, consumer_field),
+            _format_field_context(consumer_endpoint, consumer_field, consumer_value),
         ]
 
         embeddings = model.encode(
@@ -118,4 +129,4 @@ def field_match_embedding(
         return is_match, context_score
     except Exception as exc:
         logger.warning("Embedding comparison failed: %s", exc)
-        return False, 0.0
+        return None, 0.0
