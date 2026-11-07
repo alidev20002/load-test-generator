@@ -31,9 +31,10 @@ from LCS_matcher_approach import LCS_THRESHOLD, lcs_url_match, name_match
 
 logger = logging.getLogger(__name__)
 
-SIMILARITY_THRESHOLD: float = 0.8
-VALIDATOR_SCORE_THRESHOLD: float = 0.8
+SIMILARITY_THRESHOLD: float = 0.6
+VALIDATOR_SCORE_THRESHOLD: float = 0.6
 DEFAULT_EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+SECONDARY_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -148,7 +149,7 @@ def field_match_embedding(
             embeddings = encoder_fn(texts)
         elif _HAS_SENTENCE_TRANSFORMERS and SentenceTransformer is not None:
             model = _load_model(model_name)
-            print(f"\n\n{texts[0]}\n{texts[1]}")
+            # print(f"\n\n{texts[0]}\n{texts[1]}")
             embeddings = model.encode(
                 texts,
                 normalize_embeddings=True,
@@ -160,7 +161,7 @@ def field_match_embedding(
             return False, 0.0
 
         context_score = float(np.dot(embeddings[0], embeddings[1]))
-        print(f"Similarity: {context_score}")
+        # print(f"Similarity: {context_score}")
         is_match = context_score >= similarity_threshold
         return is_match, context_score
     except Exception as exc:
@@ -270,7 +271,7 @@ class EmbeddingMatcher:
 
     def __init__(
         self,
-        model_name: str = DEFAULT_EMBEDDING_MODEL,
+        model_name: str = SECONDARY_EMBEDDING_MODEL,
         similarity_threshold: float = SIMILARITY_THRESHOLD,
         validator_threshold: float = VALIDATOR_SCORE_THRESHOLD,
         fallback_to_lcs: bool = False,
