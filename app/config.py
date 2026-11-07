@@ -17,7 +17,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "model": "gemma3:4b",
     "timeout": 30.0,
     "fallback_to_lcs": True,
-    "cache_enabled": True,
+    "cache_enabled": False,
 }
 
 CONFIGS: dict[str, Any] = dict(DEFAULT_CONFIG)

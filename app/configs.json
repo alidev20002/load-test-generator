@@ -5,5 +5,5 @@
   "model": "gemma3:4b",
   "timeout": 30.0,
   "fallback_to_lcs": true,
-  "cache_enabled": true
+  "cache_enabled": false
 }
