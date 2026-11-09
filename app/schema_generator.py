@@ -22,7 +22,11 @@ def _infer_primitive_type(val: Any) -> str:
 
 def is_schema_node(obj: Any) -> bool:
     """Check if a dictionary already represents a JSON schema definition."""
-    return isinstance(obj, dict) and obj.get("type") in VALID_SCHEMA_TYPES
+    if not isinstance(obj, dict):
+        return False
+    
+    schema_type = obj.get("type")
+    return isinstance(schema_type, str) and schema_type in VALID_SCHEMA_TYPES
 
 
 def _parse_into_schema(data: Any, schema: dict[str, Any]) -> None:
