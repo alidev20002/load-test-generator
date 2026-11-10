@@ -1,4 +1,4 @@
-# Load Test Generator — FastAPI service
+# AutoLoadGen — FastAPI service
 
 `HAR -> dependency graph -> ready-to-run JMX` (UltimateThreadGroup). No GUI, no CLI.
 Java parity: preprocessing filters, LCS>=0.44 + Porter stemming, 5 detectors,

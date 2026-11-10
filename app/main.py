@@ -30,7 +30,7 @@ from .jmx_correlate import correlate
 from .jmx_load import Workload, apply_workload
 
 app = FastAPI(
-    title="Load Test Generator",
+    title="AutoLoadGen",
     description="Automated API Dependency Correlation and JMeter Load Test Plan Generator",
     version="2.0.0",
 )

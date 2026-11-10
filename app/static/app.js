@@ -1,4 +1,4 @@
-/* Load Test Generator GUI — covers all backend APIs */
+/* AutoLoadGen GUI — covers all backend APIs */
 const $ = (s) => document.querySelector(s);
 const state = {
   harFile: null, graph: null, mode: "LCS",
