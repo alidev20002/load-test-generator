@@ -7,20 +7,17 @@ import re
 from functools import lru_cache
 from typing import Any
 from urllib.parse import urlsplit
-
+from pathlib import Path
 import numpy as np
+
+from sentence_transformers import SentenceTransformer
+from huggingface_hub import snapshot_download
 
 logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.6
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-try:
-    from sentence_transformers import SentenceTransformer
-    _HAS_SENTENCE_TRANSFORMERS = True
-except ImportError:
-    SentenceTransformer = None  # type: ignore[assignment,misc]
-    _HAS_SENTENCE_TRANSFORMERS = False
 
 COMMON_API_BASES = (
     "https://api.spotify.com/v1",
@@ -33,13 +30,46 @@ COMMON_API_BASES = (
     "http://127.0.0.1:8080",
 )
 
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_DIR = BASE_DIR / "models" / "all-MiniLM-L6-v2"
+
+REQUIRED_FILES = [
+    "model.safetensors",
+    "modules.json",
+    "config.json",
+    "config_sentence_transformers.json",
+    "sentence_bert_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "vocab.txt",
+    "1_Pooling/config.json",
+]
 
 @lru_cache(maxsize=4)
-def _load_model(model_name: str) -> Any:
-    """Load and cache SentenceTransformer model on CPU."""
-    if not _HAS_SENTENCE_TRANSFORMERS or SentenceTransformer is None:
-        raise ImportError("sentence-transformers package is required for embedding matching.")
-    return SentenceTransformer(model_name, device="cpu")
+def _load_all_minilm_model():
+    missing_files = [
+        f for f in REQUIRED_FILES
+        if not (MODEL_DIR / f).is_file()
+    ]
+
+    if missing_files:
+        print("Downloading original model files...")
+
+        snapshot_download(
+            repo_id=MODEL_NAME,
+            local_dir=str(MODEL_DIR),
+            allow_patterns=REQUIRED_FILES,
+        )
+
+    print("Loading local model...")
+
+    return SentenceTransformer(
+        str(MODEL_DIR.resolve()),
+        device="cpu",
+        local_files_only=True,
+    )
 
 
 def _normalize_text(text: str) -> str:
@@ -100,9 +130,6 @@ def field_match_embedding(
     model_name: str = DEFAULT_EMBEDDING_MODEL,
 ) -> tuple[bool | None, float]:
     """Compute semantic similarity score between producer and consumer fields."""
-    if not _HAS_SENTENCE_TRANSFORMERS:
-        logger.debug("sentence-transformers not installed; skipping embedding match.")
-        return False, 0.0
 
     norm_producer = _normalize_text(producer_field)
     norm_consumer = _normalize_text(consumer_field)
@@ -111,7 +138,7 @@ def field_match_embedding(
         return False, 0.0
 
     try:
-        model = _load_model(model_name)
+        model = _load_all_minilm_model()
         texts = [
             _format_field_context(producer_endpoint, producer_field),
             _format_field_context(consumer_endpoint, consumer_field, consumer_value),
