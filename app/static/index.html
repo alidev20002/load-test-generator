@@ -45,11 +45,27 @@
           <div class="muted small" id="harMeta">No file selected</div>
         </label>
         <div class="row s1-options">
-          <label class="switch"><input type="checkbox" id="useLlm" /><span></span> LLM matcher</label>
-          <i class="info" data-tip="Match fields with the configured LLM instead of text similarity. Slower, but smarter.">?</i>
-          <label class="switch"><input type="checkbox" id="useEmbedding" /><span></span> EMBEDDING matcher</label>
-          <i class="info" data-tip="Match fields with the configured Embedding instead of text similarity. Slower, but smarter.">?</i>
-          <button class="btn ghost sm" id="clearHarBtn" hidden data-tip="Remove the selected file">✕</button>
+          <div class="opt-title">
+            <span>Dependency matching <small>— how values are linked between requests; pick one</small></span>
+            <button class="btn ghost sm" id="clearHarBtn" hidden data-tip="Remove the selected file">✕</button>
+          </div>
+          <div class="match-modes" role="radiogroup" aria-label="Dependency matching method">
+            <label class="match-opt on">
+              <input type="radio" name="matchMode" value="lcs" checked />
+              <span class="mo-title">LCS</span>
+              <span class="mo-sub">Text similarity · default, no model calls</span>
+            </label>
+            <label class="match-opt">
+              <input type="radio" name="matchMode" value="embedding" />
+              <span class="mo-title">Embedding</span>
+              <span class="mo-sub">Semantic similarity · slower, needs an embedding model</span>
+            </label>
+            <label class="match-opt">
+              <input type="radio" name="matchMode" value="llm" />
+              <span class="mo-title">LLM</span>
+              <span class="mo-sub">Model judges each match · slowest, most accurate</span>
+            </label>
+          </div>
         </div>
       </div>
       <div class="card">

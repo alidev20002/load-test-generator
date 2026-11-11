@@ -219,6 +219,22 @@ footer{margin-top:14px}
 .s1-head h2{margin:0}
 .dz-large{padding:34px 16px}
 .s1-options{gap:8px}
+/* dependency matcher: single choice out of LCS / Embedding / LLM */
+.opt-title{display:flex;align-items:center;gap:8px;flex:1 1 100%;font-size:12.5px;font-weight:600;color:var(--muted)}
+.opt-title small{font-weight:400;font-size:11.5px}
+.opt-title #clearHarBtn{margin-left:auto}
+.match-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:1 1 100%}
+.match-opt{position:relative;display:flex;flex-direction:column;gap:2px;padding:9px 11px 9px 31px;border:1px solid var(--stroke);border-radius:10px;background:var(--input);cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}
+.match-opt:hover{border-color:var(--acc);background:var(--hover)}
+.match-opt input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.match-opt::before{content:"";position:absolute;left:10px;top:12px;width:12px;height:12px;border-radius:50%;border:2px solid var(--node-stroke);background:var(--card);transition:.15s}
+.match-opt.on{border-color:var(--acc);background:var(--hover);box-shadow:inset 0 0 0 1px var(--acc)}
+.match-opt.on::before{border-color:var(--acc);background:var(--acc);box-shadow:inset 0 0 0 3px var(--card)}
+.match-opt:focus-within{border-color:var(--acc)}
+.match-opt .mo-title{font-size:13px;font-weight:700;color:var(--txt);line-height:1.2}
+.match-opt .mo-sub{font-size:11px;line-height:1.35;color:var(--muted)}
+.match-modes.disabled{opacity:.5;pointer-events:none}
+@media(max-width:720px){.match-modes{grid-template-columns:1fr}}
 .info{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--info-bg);color:var(--muted);font-size:11px;font-style:normal;font-weight:800;cursor:help}
 .s1-actions{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
 
