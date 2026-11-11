@@ -1283,6 +1283,35 @@ async function refreshEdgesTable() {
 }
 
 /* ---------- add-edge form: node dropdowns + per-mode validation ---------- */
+/* Plain-language name/help for the "key" input, which means something different per target type */
+const AE_KEY_META = {
+  url: { label: "URL path segment", help: "The part of the consumer's URL that holds the value, e.g. 4711 in /api/users/4711.", ph: "e.g. 4711" },
+  header: { label: "Header name", help: "The request header that carries the value, e.g. Authorization.", ph: "e.g. Authorization" },
+  queryparam: { label: "Query parameter name", help: "The query parameter that carries the value, e.g. userId in ?userId=42.", ph: "e.g. userId" },
+  cookie: { label: "Cookie name", help: "The cookie that carries the value, e.g. sessionId.", ph: "e.g. sessionId" },
+  bodyue: { label: "Form field name", help: "The form-data field that carries the value, e.g. username.", ph: "e.g. username" },
+  bodyjson: { label: "JSON field name", help: "The field inside the JSON body that carries the value, e.g. userId.", ph: "e.g. userId" },
+};
+const AE_TYPE_HELP = {
+  url: "The value becomes part of the URL path of the consumer request.",
+  header: "The value is sent as a request header of the consumer.",
+  queryparam: "The value is sent as a query parameter in the consumer's URL.",
+  cookie: "The value is sent in the consumer's Cookie header.",
+  bodyue: "The value is sent in the consumer's form-encoded body.",
+  bodyjson: "The value is sent in the consumer's JSON body.",
+};
+function aeTypeLabel(type) {
+  return (AE_KEY_META[type] || AE_KEY_META.header).label;
+}
+/* Keep labels, help text and placeholder in sync with the chosen target location */
+function updateAeKeyMeta() {
+  const type = $("#ae_type")?.value || "url";
+  const m = AE_KEY_META[type] || AE_KEY_META.header;
+  if ($("#ae_key_label")) $("#ae_key_label").textContent = `${m.label} *`;
+  if ($("#ae_key_help")) $("#ae_key_help").textContent = m.help;
+  if ($("#ae_key")) $("#ae_key").placeholder = m.ph;
+  if ($("#ae_type_help")) $("#ae_type_help").textContent = AE_TYPE_HELP[type] || "";
+}
 function aeFrontOf(backIdx) {
   const ep = endpointNodes();
   const f = ep.find((x) => x.back === backIdx);
@@ -1310,7 +1339,7 @@ function refreshAddEdgeNodeOptions() {
     fromSel.value = [...fromSel.options].some((o) => o.value === prevFrom) ? prevFrom : String(eps[0].back);
     toSel.value = [...toSel.options].some((o) => o.value === prevTo) ? prevTo : String(eps[Math.min(1, eps.length - 1)].back);
   }
-  syncAeHarIdx(); updateAeModeUI(); updateAeHint();
+  syncAeHarIdx(); updateAeModeUI(); updateAeKeyMeta(); updateAeHint();
 }
 function syncAeHarIdx() {
   const eps = endpointNodes();
@@ -1329,36 +1358,47 @@ function updateAeModeUI() {
   const mode = $("#ae_mode")?.value || "link";
   const isLink = mode === "link", isCsv = mode === "csv";
   if ($("#ae_link_fields")) $("#ae_link_fields").style.display = isLink ? "" : "none";
-  const csv = $("#ae_csv");
-  if (csv) csv.closest("div").style.opacity = isCsv ? "1" : ".45";
+  if ($("#ae_from_col")) $("#ae_from_col").style.display = isLink ? "" : "none";
+  if ($("#ae_csv_field")) $("#ae_csv_field").style.display = isCsv ? "" : "none";
+  if ($("#ae_mode_help")) $("#ae_mode_help").textContent = isLink
+    ? "The value is read from a field in a recorded response and reused by a later request."
+    : "The value comes from a column in a CSV file — one row per virtual user.";
   if ($("#ae_from")) $("#ae_from").disabled = !isLink;
   if ($("#ae_from_sel")) $("#ae_from_sel").disabled = !isLink;
   const rh = $("#ae_resp_name");
   if (rh) rh.required = isLink;
   const rx = $("#ae_resp_xpath");
   if (rx) rx.required = isLink;
+  const csv = $("#ae_csv");
   if (csv) csv.required = isCsv;
 }
 function updateAeHint() {
   const box = $("#ae_hint");
   if (!box) return;
+  if (!state.graph) { box.textContent = "Build a graph first, then describe the dependency here."; return; }
   const mode = $("#ae_mode")?.value || "link";
   const eps = endpointNodes();
   const fb = Number($("#ae_from")?.value), tb = Number($("#ae_to")?.value);
   const fl = eps.find((x) => x.back === fb)?.label || "—";
   const tl = eps.find((x) => x.back === tb)?.label || "—";
-  const key = $("#ae_key")?.value.trim() || "—";
-  const type = $("#ae_type")?.value || "—";
-  const rn = $("#ae_resp_name")?.value.trim() || "—";
-  const rx = $("#ae_resp_xpath")?.value.trim() || "—";
-  box.textContent = mode === "link"
-    ? `Will create: [${type}] ${key} · producer ${fl} → consumer ${tl} · extract ${rn} @ ${rx}`
-    : `Will create CSV value → consumer ${tl} · [${type}] ${key}`;
+  const type = $("#ae_type")?.value || "url";
+  const place = aeTypeLabel(type).toLowerCase();
+  const key = $("#ae_key")?.value.trim();
+  const dest = key ? `the ${place} “${key}” of ${tl}` : `a ${place} of ${tl}`;
+  if (mode === "csv") {
+    const csv = $("#ae_csv")?.value.trim() || "a CSV column";
+    box.textContent = `Will copy values from ${csv} into ${dest}.`;
+    return;
+  }
+  const rn = $("#ae_resp_name")?.value.trim() || "the chosen field";
+  const rx = $("#ae_resp_xpath")?.value.trim();
+  box.textContent = `Will copy ${rn}${rx ? ` (${rx})` : ""} from ${fl} into ${dest}.`;
 }
-["ae_mode", "ae_from", "ae_to", "ae_type", "ae_key", "ae_resp_name", "ae_resp_xpath"].forEach((id) => {
+["ae_mode", "ae_from", "ae_to", "ae_type", "ae_key", "ae_resp_name", "ae_resp_xpath", "ae_resp_value", "ae_csv", "ae_from_har", "ae_to_har"].forEach((id) => {
   document.getElementById(id)?.addEventListener("change", () => {
     if (id === "ae_mode") updateAeModeUI();
     if (id === "ae_from" || id === "ae_to") syncAeHarIdx();
+    if (id === "ae_type") updateAeKeyMeta();
     updateAeHint();
   });
   document.getElementById(id)?.addEventListener("input", updateAeHint);
@@ -1385,23 +1425,23 @@ $("#addEdgeForm").onsubmit = async (ev) => {
   const val = (id) => document.getElementById(id)?.value.trim() ?? "";
   const mode = val("ae_mode") || "link";
   const type = val("ae_type"), key = val("ae_key");
-  if (!key) return setStatus($("#addEdgeStatus"), "key is required (header/query/body name or subPath).", false);
+  if (!key) return setStatus($("#addEdgeStatus"), `Enter the ${aeTypeLabel(type).toLowerCase()} to fill — for example “${(AE_KEY_META[type] || AE_KEY_META.header).ph.replace(/^e\.g\. /, "")}”.`, false);
   const body = { graph: state.graph, to: Number(val("ae_to")), type, key };
   if (mode === "link") {
-    if (val("ae_from") === "") return setStatus($("#addEdgeStatus"), "Pick a producer node (from).", false);
-    if (!val("ae_resp_name")) return setStatus($("#addEdgeStatus"), "resp_name is required in link mode — it is the field read from the producer response.", false);
-    if (!val("ae_resp_xpath")) return setStatus($("#addEdgeStatus"), "resp_xpath is required in link mode — it tells which part of the producer JSON to extract (e.g. $.data.token).", false);
+    if (val("ae_from") === "") return setStatus($("#addEdgeStatus"), "Choose the producer endpoint — the one whose response contains the value.", false);
+    if (!val("ae_resp_name")) return setStatus($("#addEdgeStatus"), "Enter the field name in the producer response, e.g. token.", false);
+    if (!val("ae_resp_xpath")) return setStatus($("#addEdgeStatus"), "Enter where that field sits in the response, e.g. $.data.token.", false);
     body.from = Number(val("ae_from"));
     body.resp_name = val("ae_resp_name");
     body.resp_xpath = val("ae_resp_xpath");
     if (val("ae_resp_value")) body.resp_value = val("ae_resp_value");
   } else {
-    if (!val("ae_csv")) return setStatus($("#addEdgeStatus"), "csv is required in csv mode (format file:vars).", false);
+    if (!val("ae_csv")) return setStatus($("#addEdgeStatus"), "Enter the CSV source as file.csv:column, e.g. data/users.csv:username.", false);
     body.csv = val("ae_csv");
   }
   body.from_har_idx = Number(val("ae_from_har") || 0);
   body.to_har_idx = Number(val("ae_to_har") || 0);
-  setStatus($("#addEdgeStatus"), "Adding… POST /graphs/edges/add", null);
+  setStatus($("#addEdgeStatus"), "Adding dependency…", null);
   let r;
   try {
     r = await fetch("/graphs/edges/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1413,7 +1453,7 @@ $("#addEdgeForm").onsubmit = async (ev) => {
   state.hiddenTypes.delete(type);
   const tf = $("#edgeTypeFilter");
   if (tf && tf.value && tf.value !== type) tf.value = "";
-  setStatus($("#addEdgeStatus"), `✓ edge ${newId} added (now ${j.edges} edges)`, true);
+  setStatus($("#addEdgeStatus"), `✓ dependency ${newId} added — the graph now has ${j.edges} dependencies.`, true);
   afterGraphLoaded();
   renderLegend();
   select("edge", newId);

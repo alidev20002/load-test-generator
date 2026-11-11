@@ -153,43 +153,98 @@
         </div>
         <div class="tabbody" id="tab-add">
           <form id="addEdgeForm" class="form">
-            <div class="frow"><label>mode * <small>link = response field · csv = file value</small></label>
+            <div class="form-desc">
+              A dependency copies <b>one value</b> from one endpoint into another endpoint's request.
+              Choose where the value comes from, which endpoint receives it, and where it is inserted.
+            </div>
+
+            <div class="frow">
+              <label for="ae_mode">Where does the value come from? *</label>
               <select id="ae_mode" class="input">
-                <option value="link">link response field (from → to)</option>
-                <option value="csv">CSV value (→ to)</option>
+                <option value="link">From another endpoint's response</option>
+                <option value="csv">From a CSV data file</option>
               </select>
+              <div class="field-help" id="ae_mode_help"></div>
             </div>
+
             <div class="frow2">
-              <div><label>from (producer node) <span id="ae_from_hint" class="muted small"></span></label>
+              <div id="ae_from_col">
+                <label for="ae_from">Producer endpoint <span class="muted small">(source)</span></label>
                 <select id="ae_from" class="input"></select>
-                <button type="button" class="btn ghost sm" id="ae_from_sel">use selected node</button>
+                <button type="button" class="btn ghost sm" id="ae_from_sel">Use the selected node</button>
+                <div class="field-help">The endpoint whose response contains the value.</div>
               </div>
-              <br>
-              <div><label>to (consumer node) *</label>
+              <div>
+                <label for="ae_to">Consumer endpoint * <span class="muted small">(receiver)</span></label>
                 <select id="ae_to" class="input" required></select>
-                <button type="button" class="btn ghost sm" id="ae_to_sel">use selected node</button>
+                <button type="button" class="btn ghost sm" id="ae_to_sel">Use the selected node</button>
+                <div class="field-help">The endpoint that needs the value; it runs after the producer.</div>
               </div>
             </div>
-            <div class="frow"><label>type *</label><select id="ae_type" class="input"><option>url</option><option>header</option><option>queryparam</option><option>cookie</option><option>bodyue</option><option>bodyjson</option></select></div>
-            <div class="frow"><label>key * <small>header/query/body name or subPath</small></label><input id="ae_key" class="input" required placeholder="e.g. Authorization / userId" /></div>
+
+            <div class="frow">
+              <label for="ae_type">Where is the value inserted? *</label>
+              <select id="ae_type" class="input">
+                <option value="url">URL path segment</option>
+                <option value="header">Request header</option>
+                <option value="queryparam">Query parameter</option>
+                <option value="cookie">Cookie</option>
+                <option value="bodyue">Form body field (form data)</option>
+                <option value="bodyjson">JSON body field</option>
+              </select>
+              <div class="field-help" id="ae_type_help"></div>
+            </div>
+
+            <div class="frow">
+              <label for="ae_key" id="ae_key_label">Name in the consumer request *</label>
+              <input id="ae_key" class="input" required placeholder="e.g. Authorization" />
+              <div class="field-help" id="ae_key_help"></div>
+            </div>
+
             <div id="ae_link_fields">
-              <div class="frow"><label>resp_name * <small>field in the producer response (required for link mode)</small></label><input id="ae_resp_name" class="input" placeholder="e.g. token / id" /></div>
+              <div class="frow">
+                <label for="ae_resp_name">Field name in the producer response *</label>
+                <input id="ae_resp_name" class="input" placeholder="e.g. token" />
+                <div class="field-help">The field that holds the value. Its name is used for the script's variable.</div>
+              </div>
               <div class="frow2">
-                <div><label>resp_value</label><input id="ae_resp_value" class="input" placeholder="optional" /></div>
-                <br>
-                <div><label>resp_xpath * <small>JSON path in producer response (e.g. $.data.token)</small></label><input id="ae_resp_xpath" class="input" placeholder="e.g. $.data.token" /></div>
+                <div>
+                  <label for="ae_resp_xpath">Where the value sits in the response *</label>
+                  <input id="ae_resp_xpath" class="input" placeholder="e.g. $.data.token" />
+                  <div class="field-help">JSON path of that field, e.g. <code>$.data.token</code>.</div>
+                </div>
+                <div>
+                  <label for="ae_resp_value">Recorded value <span class="muted small">(optional)</span></label>
+                  <input id="ae_resp_value" class="input" placeholder="e.g. eyJhbGci…" />
+                  <div class="field-help">The value seen in the HAR, if known — shown as a preview.</div>
+                </div>
               </div>
             </div>
+
             <div class="frow" id="ae_csv_field">
-              <label>csv * <small>file:vars (required for csv mode)</small></label><input id="ae_csv" class="input" placeholder="data/users.csv:username" />
+              <label for="ae_csv">CSV file and column *</label>
+              <input id="ae_csv" class="input" placeholder="data/users.csv:username" />
+              <div class="field-help">Format <code>file.csv:column</code> — one row of values per virtual user.</div>
             </div>
-            <div class="frow2">
-              <div><label>from_har_idx</label><input id="ae_from_har" class="input" type="number" value="0" /></div>
-              <br>
-              <div><label>to_har_idx</label><input id="ae_to_har" class="input" type="number" value="0" /></div>
-            </div>
+
+            <details class="adv">
+              <summary>Advanced: HAR request numbers</summary>
+              <div class="frow2">
+                <div>
+                  <label for="ae_from_har">Producer HAR request #</label>
+                  <input id="ae_from_har" class="input" type="number" value="0" />
+                  <div class="field-help">0 = the producer's first occurrence. Raise it only if the value appears in a later repeat.</div>
+                </div>
+                <div>
+                  <label for="ae_to_har">Consumer HAR request #</label>
+                  <input id="ae_to_har" class="input" type="number" value="0" />
+                  <div class="field-help">0 = the consumer's first occurrence.</div>
+                </div>
+              </div>
+            </details>
+
             <div id="ae_hint" class="hint"></div>
-            <button class="btn primary" type="submit">➕ Add edge <small>/edges/add</small></button>
+            <button class="btn primary" type="submit">➕ Add dependency</button>
             <div id="addEdgeStatus" class="status"></div>
           </form>
         </div>
