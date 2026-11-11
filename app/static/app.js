@@ -845,13 +845,13 @@ function render() {
       }, lbl);
       const te = el("text", { y: 4, "text-anchor": "middle", fill: color, "font-size": 10.5, "font-weight": 700 }, lbl);
       te.textContent = txt;
-      lbl.onclick = (ev) => { ev.stopPropagation(); select("edge", id); };
+      lbl.onclick = (ev) => { ev.stopPropagation(); select("edge", id, ev); };
     }
 
     g.addEventListener("mouseenter", (ev) => {
       state.hovered = { kind: "edge", id };
       updateHighlights();
-      showEdgeTip(ev, e, id, from, to);
+      showEdgeTip(ev, e, id);
     });
     g.addEventListener("mousemove", moveTip);
     g.addEventListener("mouseleave", () => {
@@ -859,7 +859,7 @@ function render() {
       updateHighlights();
       hideTip();
     });
-    g.addEventListener("click", (ev) => { ev.stopPropagation(); select("edge", id); });
+    g.addEventListener("click", (ev) => { ev.stopPropagation(); select("edge", id, ev); });
   });
 
   // Calculate in/out degree stats per node
@@ -929,7 +929,7 @@ function render() {
       updateHighlights();
       hideTip();
     });
-    g.addEventListener("click", (ev) => { ev.stopPropagation(); select("node", i); });
+    g.addEventListener("click", (ev) => { ev.stopPropagation(); select("node", i, ev); });
 
     // Smooth Drag with Live Edge Tracking
     g.addEventListener("mousedown", (ev) => {
@@ -949,6 +949,7 @@ function render() {
       const up = () => {
         window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up);
         if (!dragged) return;
+        hideTip(true);
         state._userMoved = state._userMoved || {};
         state._userMoved[i] = true;
         render();
@@ -1051,68 +1052,195 @@ window.addEventListener("resize", () => {
   }
 });
 
+/* ---------- human-readable graph info ---------- */
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function oneLine(v) {
+  return String(v ?? "").replace(/\s+/g, " ").trim();
+}
+function clip(v, max = 48) {
+  const s = oneLine(v);
+  if (!s) return "—";
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+}
+/* Short but complete endpoint name: METHOD + path (CSV file for data sources) */
+function endpointLabel(i, max = 46) {
+  const n = i >= 0 && state.graph ? state.graph.nodes[i] : null;
+  if (!n) return "not recorded";
+  if (isCsvNode(n)) return `CSV file ${clip(String(n.filename || "data.csv").split("/").pop(), 30)}`;
+  const r = n.request || {};
+  let path = r.url || "/";
+  try { const u = new URL(path); path = u.pathname + (u.search || ""); } catch {}
+  return `${r.method || "GET"} ${clip(path, max)}`;
+}
+/* Where each dependency type lands in the consumer request */
+const EDGE_TYPE_INFO = {
+  url: { label: "URL path", where: "URL path", key: "subPath" },
+  header: { label: "header", where: "header", key: "header_name" },
+  queryparam: { label: "query parameter", where: "query parameter", key: "query_param_name" },
+  cookie: { label: "cookie", where: "cookie", key: "name" },
+  bodyue: { label: "form body field", where: "body (form data)", key: "name" },
+  bodyjson: { label: "JSON body field", where: "body (JSON)", key: "name" },
+};
+function edgeTypeInfo(e) {
+  return EDGE_TYPE_INFO[e.type] || { label: e.type || "dependency", where: "request", key: "name" };
+}
+function producerField(e) {
+  return e.dependency?.name || e.structuredObject?.name || edgeKey(e);
+}
+function consumerField(e) {
+  const info = edgeTypeInfo(e);
+  return e[info.key] || edgeKey(e);
+}
+function edgeValue(e) {
+  return oneLine(e.structuredObject?.value ?? e.dependency?.value ?? "");
+}
+function dependencySentence(e) {
+  const { from, to } = edgeEndpoints(e);
+  const info = edgeTypeInfo(e);
+  return `The field <b>${esc(clip(producerField(e), 44))}</b> of node <b>${esc(endpointLabel(from))}</b> ` +
+    `has a dependency to the field <b>${esc(clip(consumerField(e), 44))}</b> of node ` +
+    `<b>${esc(endpointLabel(to))}</b> in its ${esc(info.where)}.`;
+}
+function dependencyValueRow(value, max = 72) {
+  return `<div class="dep-val-row"><span class="dep-key">value</span>` +
+    `<span class="dep-val" title="${esc(value)}">${value ? esc(clip(value, max)) : "—"}</span></div>`;
+}
+function nodeTipHtml(n, i) {
+  const edges = state.graph?.edges || [];
+  const incoming = edges.filter((e) => edgeEndpoints(e).to === i);
+  const outgoing = edges.filter((e) => edgeEndpoints(e).from === i);
+  if (isCsvNode(n)) {
+    return `<div class="tt">⬢ Node ${i} · CSV data source</div>
+      <div class="dep-url" title="${esc(n.filename || "")}">file: ${esc(clip(String(n.filename || "—").split("/").pop(), 60))}</div>
+      <div class="tt-meta">variable: ${esc(clip(n.variablesName || "—", 46))} · ignore first line: ${n.ignorefirstLine ? "yes" : "no"}</div>
+      <div class="tt-deps"><span class="out">↑ ${outgoing.length} outgoing</span></div>
+      <div class="tt-hint">CSV values are imported into the requests below.</div>`;
+  }
+  const r = n.request || {};
+  const body = r.postData ? clip(r.postData.mimeType || "body", 30) : "";
+  return `<div class="tt">⬢ Node ${i} · ${esc(r.method || "?")} endpoint</div>
+    <div class="dep-url" title="${esc(r.url || "")}">${esc(clip(r.url || "—", 90))}</div>
+    <div class="tt-meta">${(r.headers || []).length} headers · ${(r.queryParams || []).length} query params · ${(r.cookies || []).length} cookies${body ? " · " + esc(body) : ""}</div>
+    <div class="tt-deps"><span class="in">↓ ${incoming.length} incoming</span><span class="out">↑ ${outgoing.length} outgoing</span></div>
+    <div class="tt-hint">click to keep this popup open</div>`;
+}
+function edgeTipHtml(e, id) {
+  const wholeObject = !!e.structuredObject && !e.primitive;
+  return `<div class="tt">🔗 Dependency ${id} · ${esc(edgeTypeInfo(e).label)}</div>
+    <div class="dep-sentence">${dependencySentence(e)}</div>
+    ${dependencyValueRow(edgeValue(e))}
+    ${wholeObject ? `<div class="tt-meta">The whole JSON object is passed, not a single field.</div>` : ""}
+    <div class="tt-hint">click to keep this popup open</div>`;
+}
+
 /* ---------- tooltip ---------- */
 const tip = $("#tooltip");
-function showNodeTip(ev, n, i) {
-  const r = n.request || {};
-  const deps = (state.graph.edges || []).filter((e) => nodeIdxOf(e.to) === i).length;
-  const outs = (state.graph.edges || []).filter((e) => e.from && nodeIdxOf(e.from) === i).length;
-  tip.innerHTML = `<div class="tt">⬢ node ${i} · ${r.method || "?"} endpoint</div>
-    <b>URL:</b> ${(r.url || "—").slice(0, 140)}<br/>
-    <b>HAR indices:</b> ${(n.indexs || []).join(", ") || "—"}<br/>
-    <b>headers:</b> ${(r.headers || []).length} · <b>query:</b> ${(r.queryParams || []).length} · <b>cookies:</b> ${(r.cookies || []).length}<br/>
-    <b>body:</b> ${r.postData ? ((r.postData.mimeType || "") + " " + ((r.postData.text || "").slice(0, 60))) : "—"}<br/>
-    <b>edges:</b> <span style="color:#10b981;font-weight:700">↓ ${deps} incoming</span> · <span style="color:#6366f1;font-weight:700">↑ ${outs} outgoing</span><br/>
-    <span class="muted">click to inspect · drag to move</span>`;
-  tip.classList.remove("hidden"); moveTip(ev);
+let pinnedTip = null; // { html, x, y } — popup kept open for the selected element
+
+/* Keep the popup fully inside the canvas instead of crossing its border */
+function placeTip(x, y) {
+  const wrapEl = document.querySelector(".canvas-wrap");
+  if (!wrapEl) return;
+  const wrap = wrapEl.getBoundingClientRect();
+  const tw = tip.offsetWidth || 0;
+  const th = tip.offsetHeight || 0;
+  let left = x - wrap.left + 16;
+  let top = y - wrap.top + 14;
+  if (left + tw > wrap.width - 8) left = x - wrap.left - tw - 16;
+  if (top + th > wrap.height - 8) top = y - wrap.top - th - 12;
+  tip.style.left = Math.max(8, left) + "px";
+  tip.style.top = Math.max(8, top) + "px";
 }
-function showEdgeTip(ev, e, id, from, to) {
-  const d = e.dependency || {};
-  tip.innerHTML = `<div class="tt">🔗 edge ${id} · [${e.type}] ${edgeKey(e)}</div>
-    <b>producer → consumer:</b> node ${from} → node ${to}<br/>
-    <b>variable:</b> ${edgeVar(e)}<br/>
-    <b>value:</b> ${(d.value || "").toString().slice(0, 90) || "—"}<br/>
-    <b>xpath:</b> ${d.xpath || "—"} · <b>from_set_cookie:</b> ${d.from_set_cookie ?? "—"}<br/>
-    <b>har idx:</b> ${e.from_index} → ${e.to_index} · <b>primitive:</b> ${e.primitive}<br/>
-    <span class="muted">click to edit / delete</span>`;
-  tip.classList.remove("hidden"); moveTip(ev);
+function showTip(html, ev, pin = false) {
+  tip.innerHTML = html;
+  tip.classList.remove("hidden");
+  if (pin) pinnedTip = { html, x: ev.clientX, y: ev.clientY };
+  placeTip(ev.clientX, ev.clientY);
 }
-function moveTip(ev) {
-  const wrap = document.querySelector(".canvas-wrap").getBoundingClientRect();
-  tip.style.left = Math.min(wrap.width - 340, ev.clientX - wrap.left + 16) + "px";
-  tip.style.top = (ev.clientY - wrap.top + 14) + "px";
+function showNodeTip(ev, n, i, pin = false) { showTip(nodeTipHtml(n, i), ev, pin); }
+function showEdgeTip(ev, e, id, pin = false) { showTip(edgeTipHtml(e, id), ev, pin); }
+function moveTip(ev) { placeTip(ev.clientX, ev.clientY); }
+function hideTip(force = false) {
+  if (force) pinnedTip = null;
+  else if (pinnedTip) {
+    tip.innerHTML = pinnedTip.html;
+    tip.classList.remove("hidden");
+    placeTip(pinnedTip.x, pinnedTip.y);
+    return;
+  }
+  tip.classList.add("hidden");
 }
-function hideTip() { tip.classList.add("hidden"); }
 
 /* ---------- selection + details ---------- */
-function select(kind, id = null) {
+function select(kind, id = null, ev = null) {
   state.selected = kind ? { kind, id } : null;
   $("#selPill").textContent = kind ? `${kind} ${id}` : "nothing selected";
+  if (!kind) hideTip(true);
+  else if (ev && state.graph) {
+    if (kind === "node" && state.graph.nodes[id]) showNodeTip(ev, state.graph.nodes[id], id, true);
+    else if (kind === "edge" && state.graph.edges[id]) showEdgeTip(ev, state.graph.edges[id], id, true);
+  }
   render();
   renderDetail();
 }
 function renderDetail() {
   const box = $("#detailBox");
   const s = state.selected;
-  if (!s) { box.innerHTML = `Click a node or edge in the canvas.<br/><br/>• <b>Node</b> card shows <code>METHOD</code> + short path.<br/>• Hover shows full URL, HAR indices, counts.<br/>• <b>Edge</b> hover shows type, key, producer → consumer, extracted variable.`; return; }
+  if (!s) {
+    box.innerHTML = `Click a node or an edge in the graph to see its details.<br/><br/>
+      • <b>Node</b> = one recorded endpoint (method + path).<br/>
+      • <b>Edge</b> = a value copied from one endpoint's response into another endpoint's request.<br/>
+      • Hover for a quick popup, click to keep it open.`; return;
+  }
   if (s.kind === "node") {
-    const n = state.graph.nodes[s.id], r = n.request || {};
-    box.innerHTML = `<div class="edge-row sel"><div class="er-top"><b>⬢ node ${s.id} [${r.method}]</b></div>
-      <div class="muted">${r.url || ""}</div>
-      <div>indices: ${(n.indexs || []).join(", ")} · headers ${(r.headers || []).length} · query ${(r.queryParams || []).length}</div>
-      <div class="muted small">${(r.headers || []).slice(0, 4).map((h) => h.name + ": " + String(h.value).slice(0, 40)).join("<br/>")}</div></div>`;
-  } else {
-    const e = state.graph.edges[s.id];
-    if (!e) { box.textContent = "Edge not found"; return; }
-    const { from, to } = edgeEndpoints(e);
-    box.innerHTML = `<div class="edge-row sel"><div class="er-top">
-      <span class="badge" style="background:${EDGE_COLORS[e.type] || "#fff"}">[${e.type}] ${edgeKey(e)}</span>
+    const n = state.graph?.nodes?.[s.id];
+    if (!n) { box.textContent = "Node not found"; return; }
+    const edges = state.graph.edges || [];
+    const incoming = edges.filter((e) => edgeEndpoints(e).to === s.id);
+    const outgoing = edges.filter((e) => edgeEndpoints(e).from === s.id);
+    const depList = (arr, dir) => {
+      if (!arr.length) return `<div class="muted small">none</div>`;
+      const rows = arr.slice(0, 8).map((e) => {
+        const ep = edgeEndpoints(e);
+        const other = dir === "in" ? ep.from : ep.to;
+        return `<li><span class="dep-dot" style="background:${EDGE_COLORS[e.type] || "#888"}"></span>
+          <b>${esc(clip(edgeKey(e), 34))}</b> <span class="muted">(${esc(edgeTypeInfo(e).where)})</span>
+          ${dir === "in" ? "from" : "to"} ${esc(endpointLabel(other, 34))}</li>`;
+      }).join("");
+      return `<ul class="dep-list">${rows}${arr.length > 8 ? `<li class="muted">… ${arr.length - 8} more</li>` : ""}</ul>`;
+    };
+    if (isCsvNode(n)) {
+      box.innerHTML = `<div class="edge-row sel">
+        <div class="er-top"><b>⬢ Node ${s.id} · CSV data source</b></div>
+        <div>file: <b>${esc(String(n.filename || "—").split("/").pop())}</b></div>
+        <div>variable: <b>${esc(n.variablesName || "—")}</b></div>
+        <div class="muted small">ignore first line: ${n.ignorefirstLine ? "yes" : "no"} · encoding: ${esc(n.encoding || "UTF-8")}</div>
+        <div class="dep-sec"><b class="out">↑ ${outgoing.length} outgoing</b>${depList(outgoing, "out")}</div>
+      </div>`;
+      return;
+    }
+    const r = n.request || {};
+    box.innerHTML = `<div class="edge-row sel">
+      <div class="er-top"><b>⬢ Node ${s.id} · ${esc(r.method || "?")}</b></div>
+      <div class="dep-url" title="${esc(r.url || "")}">${esc(clip(r.url || "—", 120))}</div>
+      <div class="muted small">${(r.headers || []).length} headers · ${(r.queryParams || []).length} query params · ${(r.cookies || []).length} cookies${r.postData ? " · body " + esc(clip(r.postData.mimeType || "", 30)) : ""}</div>
+      <div class="dep-sec"><b class="in">↓ ${incoming.length} incoming</b>${depList(incoming, "in")}</div>
+      <div class="dep-sec"><b class="out">↑ ${outgoing.length} outgoing</b>${depList(outgoing, "out")}</div>
+    </div>`;
+    return;
+  }
+  const e = state.graph?.edges?.[s.id];
+  if (!e) { box.textContent = "Edge not found"; return; }
+  const wholeObject = !!e.structuredObject && !e.primitive;
+  box.innerHTML = `<div class="edge-row sel"><div class="er-top">
+      <span class="badge" style="background:${EDGE_COLORS[e.type] || "#fff"}">${esc(edgeTypeInfo(e).label)}</span>
       <span><button class="btn ghost sm" onclick="openEdit(${s.id})">✏ edit</button>
       <button class="icon-btn" onclick="deleteEdge(${s.id})">🗑</button></span></div>
-      <div>edge ${s.id}: node ${from} → node ${to}</div>
-      <div>var <b>${edgeVar(e)}</b> · value ${(e.dependency?.value || "").toString().slice(0, 80)}</div>
-      <div class="muted">xpath ${e.dependency?.xpath || "—"} · har ${e.from_index}→${e.to_index}</div></div>`;
-  }
+      <div class="dep-sentence">${dependencySentence(e)}</div>
+      ${dependencyValueRow(edgeValue(e), 140)}
+      ${wholeObject ? `<div class="muted small">The whole JSON object is passed, not a single field.</div>` : ""}</div>`;
 }
 
 /* ---------- tabs ---------- */
@@ -1141,9 +1269,11 @@ async function refreshEdgesTable() {
   edges.forEach((e) => {
     const d = document.createElement("div");
     d.className = "edge-row" + (state.selected?.kind === "edge" && state.selected.id === e.id ? " sel" : "");
-    d.innerHTML = `<div class="er-top"><span class="badge" style="background:${EDGE_COLORS[e.type] || "#fff"}">[${e.type}] ${(e.key || "—").toString().slice(0, 24)}</span>
+    const ge = (state.graph.edges || [])[e.id];
+    const info = edgeTypeInfo(e);
+    d.innerHTML = `<div class="er-top"><span class="badge" style="background:${EDGE_COLORS[e.type] || "#fff"}">${esc(info.label)} · ${esc(clip(e.key || "—", 24))}</span>
       <span><button class="btn ghost sm">✏</button> <button class="icon-btn">🗑</button></span></div>
-      <div>edge ${e.id}: ${e.from_index === -1 ? "MANUAL" : "har " + e.from_index} → node-edge to ${e.to_index} · var <b>${e.dependency?.name || "—"}</b></div>`;
+      <div class="dep-sentence">${ge ? dependencySentence(ge) : `Dependency on this endpoint's ${esc(info.where)}.`}</div>`;
     const [eb, db] = d.querySelectorAll("button");
     eb.onclick = () => openEdit(e.id);
     db.onclick = () => deleteEdge(e.id);
@@ -1294,6 +1424,7 @@ window.deleteEdge = async (id) => {
   if (!r.ok) return alert("Delete failed: " + (await r.text()).slice(0, 300));
   const j = await r.json();
   state.graph = j.graph; state.selected = null;
+  hideTip(true);
   afterGraphLoaded();
 };
 window.openEdit = (id) => {
